@@ -1,0 +1,16 @@
+[Unit]
+Description=Weazlback overdue backup opportunity
+Documentation=https://github.com/bprendie/weazlback
+Wants=network-online.target
+After=network-online.target graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.weazlback/bin/weazlback schedule run
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=default.target

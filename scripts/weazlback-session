@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+session=${WEAZLBACK_SESSION:-weazlback}
+app=${WEAZLBACK_BIN:-"$HOME/.weazlback/bin/weazlback"}
+action=${1:-open}
+
+session_env=(env -u NO_COLOR "HOME=$HOME")
+[[ -n ${WEAZLBACK_HOME:-} ]] && session_env+=("WEAZLBACK_HOME=$WEAZLBACK_HOME")
+[[ -n ${WEAZLBACK_CONFIG:-} ]] && session_env+=("WEAZLBACK_CONFIG=$WEAZLBACK_CONFIG")
+[[ -n ${WEAZLBACK_START_MODE:-} ]] && session_env+=("WEAZLBACK_START_MODE=$WEAZLBACK_START_MODE")
+
+session_is_live() {
+  tmux has-session -t "$session" 2>/dev/null || return 1
+  [[ $(tmux display-message -p -t "$session" '#{pane_dead}' 2>/dev/null) != 1 ]]
+}
+
+case "$action" in
+  status)
+    if tmux has-session -t "$session" 2>/dev/null; then
+      printf '{"running":true,"attached":%s}\n' \
+        "$(tmux display-message -p -t "$session" '#{session_attached}')"
+    else
+      printf '{"running":false,"attached":0}\n'
+    fi
+    ;;
+  quit-and-lock)
+    if tmux has-session -t "$session" 2>/dev/null; then
+      tmux send-keys -t "$session" C-c
+    fi
+    ;;
+  open)
+    unset NO_COLOR
+    if session_is_live; then
+      if [[ ${WEAZLBACK_START_MODE:-} == restore ]]; then
+        pane_pid=$(tmux display-message -p -t "$session" '#{pane_pid}')
+        kill -USR1 "$pane_pid"
+      fi
+      exec tmux attach-session -t "$session"
+    fi
+    tmux kill-session -t "$session" 2>/dev/null || true
+    exec tmux new-session -s "$session" "${session_env[@]}" "$app"
+    ;;
+  *)
+    echo "usage: weazlback-session <open|status|quit-and-lock>" >&2
+    exit 2
+    ;;
+esac

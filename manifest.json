@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.bprendie.weazlback",
+  "name": "Weazlback",
+  "version": "1.0.0-rc5",
+  "author": "Bob Prendergast",
+  "license": "MIT",
+  "description": "Encrypted backup status and controls for Weazlback.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "widget/weazlback/BarWidget.qml"},
+  "barWidget": {
+    "displayName": "Weazlback",
+    "description": "Sovereign encrypted backup status and controls",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {"binaryPath": ""},
+    "schema": [{"key":"binaryPath","type":"path","label":"Weazlback binary","defaultValue":"","description":"Absolute path to weazlback"}]
+  }
+}
