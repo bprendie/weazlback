@@ -91,7 +91,7 @@ go build -o ./weazlback-restore ./cmd/weazlback-restore
 
 To run the retained benchmark harness on Omarchy: `omarchy pkg add borg restic`.
 
-## Project Holley: Package Capsule
+## Package Capsule
 
 Fresh metal should not spend its first hour begging mirrors for packages or compiling
 an AUR leviathan. The Package Capsule is a dedicated encrypted Restore Point holding
@@ -132,7 +132,7 @@ packages move visibly to their normal online lanes. The selected package Restore
 Point and its timestamp are disclosed independently from Core and Home; recovery
 never quietly mixes artifacts from different capsule generations.
 
-### Holley Recovery Foundation
+### Turbo Recovery Foundation
 
 Fresh recovery records a private mode-0600 schema-v2 journal with the requested engine,
 qualification result, exact fallback phase, resource budget, time to usable, and
@@ -166,7 +166,7 @@ weazlback benchmark --engine turbo --fixture all --trials 3 --connections 4
 
 Turbo is promoted per workload only after it beats Standard without metadata,
 sparse-allocation, authentication, cancellation, or durability regressions. A
-workload that misses the performance gate stays on Standard; Holley does not cook
+workload that misses the performance gate stays on Standard; Turbo does not cook
 the scoreboard.
 
 ## Prime Vector Nugs: The Heavy Lane
