@@ -3,6 +3,7 @@ package freshrestore
 import (
 	"time"
 
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/restic"
@@ -30,6 +31,7 @@ type Options struct {
 	AdoptSourceIdentity   bool
 	TargetMachineID       string
 	PersistTargetIdentity bool
+	BrowserProcesses      browserrepair.ProcessChecker
 }
 
 type RestoreProgress struct {
@@ -60,6 +62,7 @@ type Plan struct {
 	OriginalHome          string                         `json:"original_home"`
 	TargetHome            string                         `json:"target_home"`
 	Hostname              string                         `json:"hostname"`
+	SourceHostname        string                         `json:"source_hostname"`
 	SourceUID             uint32                         `json:"source_uid"`
 	SourceGID             uint32                         `json:"source_gid"`
 	TargetUID             uint32                         `json:"target_uid"`
@@ -77,31 +80,36 @@ type Plan struct {
 }
 
 type Journal struct {
-	SchemaVersion   int       `json:"schema_version"`
-	RepositoryID    string    `json:"repository_id"`
-	SnapshotID      string    `json:"snapshot_id"`
-	HomeSnapshotID  string    `json:"home_snapshot_id,omitempty"`
-	HeavySnapshotID string    `json:"heavy_snapshot_id,omitempty"`
-	Scope           string    `json:"scope,omitempty"`
-	Stage           string    `json:"stage"`
-	Hostname        string    `json:"hostname"`
-	TargetHome      string    `json:"target_home"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	Connections     int       `json:"connections,omitempty"`
-	PackageErrors   []string  `json:"package_errors,omitempty"`
-	CommittedPaths  []string  `json:"committed_paths,omitempty"`
-	PendingSource   string    `json:"pending_source,omitempty"`
-	PendingTarget   string    `json:"pending_target,omitempty"`
-	PendingBackup   string    `json:"pending_backup,omitempty"`
+	SchemaVersion   int                  `json:"schema_version"`
+	RepositoryID    string               `json:"repository_id"`
+	SnapshotID      string               `json:"snapshot_id"`
+	HomeSnapshotID  string               `json:"home_snapshot_id,omitempty"`
+	HeavySnapshotID string               `json:"heavy_snapshot_id,omitempty"`
+	Scope           string               `json:"scope,omitempty"`
+	Stage           string               `json:"stage"`
+	Hostname        string               `json:"hostname"`
+	TargetHome      string               `json:"target_home"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	Connections     int                  `json:"connections,omitempty"`
+	PackageErrors   []string             `json:"package_errors,omitempty"`
+	CommittedPaths  []string             `json:"committed_paths,omitempty"`
+	PendingSource   string               `json:"pending_source,omitempty"`
+	PendingTarget   string               `json:"pending_target,omitempty"`
+	PendingBackup   string               `json:"pending_backup,omitempty"`
+	BrowserRepair   browserrepair.Result `json:"browser_repair,omitempty"`
+	BrowserIssues   []string             `json:"browser_issues,omitempty"`
+	BrowserJournal  string               `json:"browser_journal,omitempty"`
 }
 
 type Report struct {
-	SnapshotID    string   `json:"snapshot_id"`
-	Hostname      string   `json:"hostname"`
-	RestoredPaths []string `json:"restored_paths,omitempty"`
-	PackageErrors []string `json:"package_errors,omitempty"`
-	ManualReview  []string `json:"manual_review,omitempty"`
-	HeavyDeferred bool     `json:"heavy_deferred"`
-	JournalPath   string   `json:"journal_path"`
-	Complete      bool     `json:"complete"`
+	SnapshotID    string               `json:"snapshot_id"`
+	Hostname      string               `json:"hostname"`
+	RestoredPaths []string             `json:"restored_paths,omitempty"`
+	PackageErrors []string             `json:"package_errors,omitempty"`
+	ManualReview  []string             `json:"manual_review,omitempty"`
+	HeavyDeferred bool                 `json:"heavy_deferred"`
+	JournalPath   string               `json:"journal_path"`
+	Complete      bool                 `json:"complete"`
+	BrowserRepair browserrepair.Result `json:"browser_repair,omitempty"`
+	BrowserIssues []string             `json:"browser_issues,omitempty"`
 }

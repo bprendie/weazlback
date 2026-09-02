@@ -7,9 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
-
-	"github.com/bprendie/weazlback/internal/restic"
 )
 
 func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error) {
@@ -93,6 +90,15 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 		}
 	}
 	report.RestoredPaths = append([]string(nil), r.Journal.CommittedPaths...)
+	if r.Plan.Scope != "applications" && !stageAtLeast(r.Journal.Stage, "browser_compatibility") {
+		result, issues := r.repairBrowserCompatibility()
+		r.Journal.BrowserRepair, r.Journal.BrowserIssues = result, issues
+		if err := r.advance("browser_compatibility"); err != nil {
+			return report, err
+		}
+	}
+	report.BrowserRepair = r.Journal.BrowserRepair
+	report.BrowserIssues = append([]string(nil), r.Journal.BrowserIssues...)
 	if r.Plan.Scope != "applications" && !stageAtLeast(r.Journal.Stage, "user_state_reconciled") {
 		offset := len(r.Plan.Official) + len(r.Plan.AUR) + len(r.Plan.SystemServices)
 		report.PackageErrors = append(report.PackageErrors, reconcileApplicationLanes(ctx, r.Plan, r.Options.Progress, false, true, offset)...)
@@ -124,7 +130,7 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 			return report, fmt.Errorf("persist target machine identity: %w", err)
 		}
 	}
-	report.Complete = len(report.PackageErrors) == 0
+	report.Complete = len(report.PackageErrors) == 0 && len(report.BrowserIssues) == 0
 	if report.Complete {
 		if err := r.advance("complete"); err != nil {
 			return report, err
@@ -188,24 +194,6 @@ func (r *Restore) restoreAndCommitHeavy(ctx context.Context) ([]string, error) {
 		restored = append(restored, path)
 	}
 	return restored, nil
-}
-
-func (r *Restore) restorePoint(ctx context.Context, label, snapshot, target string) error {
-	started := time.Now()
-	return r.service.RestoreWithProgress(ctx, r.Session.Repository, snapshot, target, nil, func(value restic.RestoreProgress) {
-		total, completed := int(value.TotalFiles), int(value.FilesRestored)
-		if value.MessageType == "summary" && total > 0 {
-			completed = total
-		}
-		elapsed := time.Since(started).Seconds()
-		bytesRate, filesRate := 0.0, 0.0
-		if elapsed > 0 {
-			bytesRate = float64(value.BytesRestored) / elapsed
-			filesRate = float64(value.FilesRestored) / elapsed
-		}
-		emitProgress(r.Options.Progress, RestoreProgress{Phase: "filesystem", Lane: label, Current: "decrypting and extracting", Completed: completed, Total: total,
-			BytesDone: value.BytesRestored, BytesTotal: value.TotalBytes, BytesPerSecond: bytesRate, FilesPerSecond: filesRate})
-	})
 }
 
 func (r *Restore) expectedTargets() []string {

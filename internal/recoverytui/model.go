@@ -83,6 +83,7 @@ type Model struct {
 	report                    freshrestore.Report
 	appProgress               freshrestore.RestoreProgress
 	filesystemProgress        freshrestore.RestoreProgress
+	browserProgress           freshrestore.RestoreProgress
 	review                    []string
 	reviewIndex               int
 	started                   time.Time
@@ -257,6 +258,8 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case progressMsg:
 		if msg.progress.Phase == "applications" {
 			m.appProgress = msg.progress
+		} else if msg.progress.Phase == "browser compatibility" {
+			m.browserProgress = msg.progress
 		} else {
 			m.filesystemProgress = msg.progress
 		}

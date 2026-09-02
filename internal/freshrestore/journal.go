@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var stages = []string{"start", "preflight", "repository_verified", "snapshot_selected", "plan_confirmed", "hostname_applied", "core_staged", "packages_reconciled", "core_committed", "user_state_reconciled", "heavy_committed", "system_validated", "complete"}
+var stages = []string{"start", "preflight", "repository_verified", "snapshot_selected", "plan_confirmed", "hostname_applied", "core_staged", "packages_reconciled", "core_committed", "browser_compatibility", "user_state_reconciled", "heavy_committed", "system_validated", "complete"}
 
 func LoadJournal(path string) (Journal, error) {
 	var journal Journal

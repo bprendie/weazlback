@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/restic"
 )
 
@@ -49,11 +50,12 @@ type Progress struct {
 }
 
 type Result struct {
-	JournalPath string
-	StagedAt    string
-	Placed      []string
-	Rollback    []string
-	Skipped     []string
+	JournalPath   string
+	StagedAt      string
+	Placed        []string
+	Rollback      []string
+	Skipped       []string
+	BrowserRepair browserrepair.Result
 }
 
 type Service interface {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/backupmeta"
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/contracts"
@@ -80,6 +81,10 @@ func runUnlockedWidgetBackup(ctx context.Context, cfg config.Config, destination
 		prepared := *profile
 		prepared.Includes = append([]string(nil), profile.Includes...)
 		prepared.Excludes = append([]string(nil), profile.Excludes...)
+		if name == "core" || name == "home" {
+			home, _ := os.UserHomeDir()
+			prepared.Excludes = append(prepared.Excludes, browserrepair.Exclusions(browserrepair.Options{Home: home, UID: os.Getuid(), Processes: browserrepair.ProcFS{}})...)
+		}
 		if name == "core" && manifestPath != "" {
 			prepared.Includes = append(prepared.Includes, manifestPath)
 		}

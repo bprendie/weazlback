@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/backupmeta"
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/contracts"
@@ -140,6 +141,10 @@ func backupCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		backupProfile.Includes = append(append([]string(nil), profile.Includes...), manifestPath)
 	}
 	backupProfile.Excludes = append([]string(nil), profile.Excludes...)
+	if profile.Name == "core" || profile.Name == "home" {
+		home, _ := os.UserHomeDir()
+		backupProfile.Excludes = append(backupProfile.Excludes, browserrepair.Exclusions(browserrepair.Options{Home: home, UID: os.Getuid(), Processes: browserrepair.ProcFS{}})...)
+	}
 	if profile.Name == "heavy" {
 		heavyReport := heavy.Inspect(profile.Includes)
 		if !heavyReport.Safe {

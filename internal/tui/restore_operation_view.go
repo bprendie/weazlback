@@ -74,6 +74,9 @@ func (m Model) restoreTransactionProgressView() string {
 func (m Model) restoreTransactionResultView() string {
 	body := fmt.Sprintf("RESTORE TRANSACTION\n\nPlaced       %d\nRollback     %d\nSkipped      %d\nStaging      %s\nJournal      %s",
 		len(m.restoreResult.Placed), len(m.restoreResult.Rollback), len(m.restoreResult.Skipped), m.restoreResult.StagedAt, m.restoreResult.JournalPath)
+	if m.restoreResult.BrowserRepair.Removed+m.restoreResult.BrowserRepair.Live+m.restoreResult.BrowserRepair.Failed > 0 {
+		body += fmt.Sprintf("\nBrowser      %d removed / %d live / %d failed", m.restoreResult.BrowserRepair.Removed, m.restoreResult.BrowserRepair.Live, m.restoreResult.BrowserRepair.Failed)
+	}
 	if m.restoreBundleJournal != "" {
 		body += "\nComposition  " + m.restoreBundleJournal
 	}

@@ -122,7 +122,7 @@ func main() {
 		if !report.Complete {
 			status = "incomplete"
 		}
-		fmt.Printf("\nRestore %s: %d paths placed; %d exceptions.\n", status, len(report.RestoredPaths), len(report.PackageErrors))
+		fmt.Printf("\nRestore %s: %d paths placed; %d browser locks removed; %d exceptions.\n", status, len(report.RestoredPaths), report.BrowserRepair.Removed, len(report.PackageErrors)+len(report.BrowserIssues))
 		fmt.Printf("Journal: %s\n", report.JournalPath)
 	}
 }

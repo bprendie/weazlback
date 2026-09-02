@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/restoretxn"
@@ -189,6 +190,7 @@ func (m Model) runRestoreTransaction() (tea.Model, tea.Cmd) {
 	plans, vaultFile := append([]restoretxn.Plan(nil), m.restorePlans...), m.vault
 	bundleMode, deletions := m.restoreBundleMode, append([]string(nil), m.restoreBundleDeletes...)
 	bundleParts := append([]restoretxn.Component(nil), m.restoreBundleParts...)
+	targetMode := m.restoreTargetMode
 	bundleJournal := ""
 	if len(bundleParts) > 0 && len(plans) > 0 {
 		bundleJournal = filepath.Join(filepath.Dir(plans[0].JournalPath), strings.TrimSuffix(filepath.Base(plans[0].JournalPath), ".enc")+"-bundle.enc")
@@ -240,6 +242,23 @@ func (m Model) runRestoreTransaction() (tea.Model, tea.Cmd) {
 			}
 			if bundleJournal != "" {
 				_ = restoretxn.SaveBundleJournal(bundleJournal, vaultFile, restoretxn.BundleJournal{OperationID: plans[0].ID, Mode: bundleMode, State: "running", Completed: index + 1, Components: bundleParts, Deletions: deletions})
+			}
+		}
+		if len(bundleParts) > 0 && targetMode == "original" {
+			browserPlan, browserResult := repairInstalledBundleBrowsers(bundleParts)
+			combined.BrowserRepair = browserResult
+			payload, _ := json.Marshal(struct {
+				Entries []browserrepair.Entry `json:"entries"`
+				Result  browserrepair.Result  `json:"result"`
+			}{browserPlan.Entries, browserResult})
+			_, _ = securelog.Write(vaultFile, "browser-compatibility", plans[0].ID, payload)
+			if browserResult.Live+browserResult.Boundary+browserResult.Failed > 0 {
+				if bundleJournal != "" {
+					_ = restoretxn.SaveBundleJournal(bundleJournal, vaultFile, restoretxn.BundleJournal{OperationID: plans[0].ID, Mode: bundleMode, State: "incomplete", Completed: len(plans), Components: bundleParts, Deletions: deletions})
+				}
+				sendLatestOperationEvent(events, restoreTransactionDoneMsg{result: combined, err: fmt.Errorf("browser compatibility incomplete: %d live, %d boundary, %d failed", browserResult.Live, browserResult.Boundary, browserResult.Failed)})
+				close(events)
+				return
 			}
 		}
 		if bundleJournal != "" {

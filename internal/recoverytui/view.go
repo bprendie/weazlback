@@ -93,7 +93,7 @@ func (m Model) body() string {
 		if !m.report.Complete {
 			result = "Restore incomplete — review exceptions"
 		}
-		return fmt.Sprintf("%s\nPlaced paths   %d\nExceptions     %d\nJournal        %s", result, len(m.report.RestoredPaths), len(m.report.PackageErrors), m.report.JournalPath) + errorText(m.err)
+		return fmt.Sprintf("%s\nPlaced paths   %d\nBrowser locks  %d removed / %d live\nExceptions     %d\nJournal        %s", result, len(m.report.RestoredPaths), m.report.BrowserRepair.Removed, m.report.BrowserRepair.Live, len(m.report.PackageErrors)+len(m.report.BrowserIssues), m.report.JournalPath) + errorText(m.err)
 	default:
 		return "Starting recovery…"
 	}
@@ -219,7 +219,8 @@ func (m Model) progressView() string {
 	elapsed := time.Since(m.started).Round(time.Second)
 	filesystem := laneView("FILESYSTEM / "+strings.ToUpper(m.filesystemProgress.Lane), m.filesystemProgress, false)
 	applications := laneView("APPLICATIONS / "+strings.ToUpper(m.appProgress.Lane), m.appProgress, true)
-	return filesystem + "\n\n" + applications + "\n\nElapsed " + elapsed.String() + "  •  resumable journal active"
+	browser := laneView("BROWSER COMPATIBILITY", m.browserProgress, true)
+	return filesystem + "\n\n" + applications + "\n\n" + browser + "\n\nElapsed " + elapsed.String() + "  •  resumable journal active"
 }
 
 func laneView(title string, p freshrestore.RestoreProgress, failures bool) string {

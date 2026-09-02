@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/backupmeta"
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/heavy"
@@ -94,6 +95,10 @@ func (m Model) beginEngineBackup() (tea.Model, tea.Cmd) {
 		}
 		defer cleanupManifest()
 		excludes := append(append([]string{}, profile.Excludes...), m.skippedPaths...)
+		if profile.Name == "core" || profile.Name == "home" {
+			home, _ := os.UserHomeDir()
+			excludes = append(excludes, browserrepair.Exclusions(browserrepair.Options{Home: home, UID: os.Getuid(), Processes: browserrepair.ProcFS{}})...)
+		}
 		includes := append([]string(nil), profile.Includes...)
 		if manifestPath != "" {
 			includes = append(includes, manifestPath)

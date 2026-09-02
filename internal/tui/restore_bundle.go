@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/bprendie/weazlback/internal/backupmeta"
+	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/heavy"
@@ -262,7 +264,12 @@ func (m Model) runBundleSafetyBackup() (tea.Model, tea.Cmd) {
 			if manifest != "" {
 				includes = append(includes, manifest)
 			}
-			err := service.BackupMachineWithProgress(ctx, repo, profile.Name, cfg.Machine.ID, includes, profile.Excludes, false, false, nil)
+			excludes := append([]string(nil), profile.Excludes...)
+			if profile.Name == "core" || profile.Name == "home" {
+				home, _ := os.UserHomeDir()
+				excludes = append(excludes, browserrepair.Exclusions(browserrepair.Options{Home: home, UID: os.Getuid(), Processes: browserrepair.ProcFS{}})...)
+			}
+			err := service.BackupMachineWithProgress(ctx, repo, profile.Name, cfg.Machine.ID, includes, excludes, false, false, nil)
 			cleanup()
 			if err != nil {
 				return bundleSafetyMsg{err}

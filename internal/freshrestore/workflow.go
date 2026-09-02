@@ -153,6 +153,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		return nil, err
 	}
 	r.Plan.Applications = &manifest
+	r.Plan.SourceHostname = manifest.Hostname
 	r.Plan.Hostname, err = ResolveHostname(options.Hostname, manifest.Hostname)
 	if err != nil {
 		r.Close()

@@ -210,6 +210,32 @@ For a zero-mutation drill, use the explicit inspection flags:
 
 Run these drills before disaster day. A recovery kit you have never bootstrapped is a theory, not a backup strategy.
 
+### Browser Compatibility After Hostname Changes
+
+Core, Home, and Everything recovery automatically inspect restored browser
+profiles when the source and target hostnames differ. Weazlback removes only
+marker-validated transient Chromium `Singleton*` locks and Mozilla
+`.parentlock`/`lock` entries. Cookies, sessions, credentials, history,
+extensions, preferences, and every other profile file remain untouched.
+
+Close browsers before recovery. A running matching browser is never killed;
+its locks are skipped and the restore reports an exception. Native and Flatpak
+profiles are supported for Chromium, Chrome, Brave, Edge, Vivaldi, Opera,
+Firefox, LibreWolf, Waterfox, Floorp, Zen, Mullvad Browser, and their documented
+variants. Unknown, custom, ambiguous, symlinked, or foreign-owned roots are
+left alone.
+
+Inspect or repair stale locks without repository access:
+
+```sh
+weazlback browser repair          # count-only dry run
+weazlback browser repair --apply  # exact validated unlink
+```
+
+The command prints sanitized counts, not profile paths. New backups omit
+validated transient locks; older Restore Points remain compatible and are
+repaired after placement when required.
+
 ## Flow State Tuning
 
 Weazlback defaults to 4 parallel connections for I/O. Do not guess your throughput—measure it. Run `weazlback tune` after a representative Core backup. It benchmarks 2, 4, and 10 repository connections, prints the results, and asks which value to save.
