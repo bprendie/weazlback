@@ -6,7 +6,7 @@ func navigationDescription(current mode) string {
 		modeBackup:       "Create an encrypted Core, Home, or Heavy restore point.",
 		modeSnapshots:    "Immutable Restic manifests of paths, metadata, and deduplicated chunks.\nThese are not filesystem or block-device snapshots.",
 		modeRestore:      "Recover selected files and folders safely, or begin full-system recovery.",
-		modeProfiles:     "Review Core/Home/Heavy policy and the application restore manifest.",
+		modeProfiles:     "Inspect application state and forge an independent encrypted Package Capsule.",
 		modeDestinations: "Manage encrypted SSH and local repositories and pinned host identity.",
 		modeRecovery:     "Export or verify the password-locked kit needed on a fresh machine.",
 		modeCheck:        "Verify encrypted repository indexes; full-data checks read every pack.",

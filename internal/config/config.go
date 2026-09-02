@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const SchemaVersion = 1
@@ -21,6 +22,7 @@ type Config struct {
 	Profiles          []Profile     `json:"profiles"`
 	Retention         Retention     `json:"retention"`
 	HeavyRetention    Retention     `json:"heavy_retention"`
+	PackagePolicy     PackagePolicy `json:"package_policy"`
 }
 
 type Machine struct {
@@ -72,6 +74,24 @@ type Retention struct {
 	Monthly int `json:"monthly"`
 }
 
+type PackagePolicy struct {
+	Scheduled        bool       `json:"scheduled"`
+	IntervalDays     int        `json:"interval_days"`
+	DownloadOfficial bool       `json:"download_official"`
+	LastCaptured     *time.Time `json:"last_captured,omitempty"`
+	LastReminder     *time.Time `json:"last_reminder,omitempty"`
+}
+
+func (p PackagePolicy) Due(now time.Time) bool {
+	if !p.Scheduled {
+		return false
+	}
+	if p.LastCaptured == nil {
+		return true
+	}
+	return now.Sub(*p.LastCaptured) >= time.Duration(p.IntervalDays)*24*time.Hour
+}
+
 func Default() Config {
 	home, _ := os.UserHomeDir()
 	hostname, _ := os.Hostname()
@@ -86,6 +106,7 @@ func Default() Config {
 		Machine:        newMachine(hostname),
 		Retention:      Retention{Hourly: 24, Daily: 14, Weekly: 8, Monthly: 12},
 		HeavyRetention: Retention{Daily: 7, Weekly: 4, Monthly: 3},
+		PackagePolicy:  PackagePolicy{IntervalDays: 30, DownloadOfficial: true},
 		Profiles: []Profile{
 			{Name: "core", Includes: core,
 				Excludes: []string{"**/Cache/**", "**/cache/**", "**/.cache/**"}},
@@ -220,6 +241,11 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.HeavyRetention == (Retention{}) {
 		cfg.HeavyRetention = Retention{Daily: 7, Weekly: 4, Monthly: 3}
+	}
+	if cfg.PackagePolicy.IntervalDays <= 0 {
+		cfg.PackagePolicy.IntervalDays = 30
+		cfg.PackagePolicy.DownloadOfficial = true
+		changed = true
 	}
 	for i := range cfg.Profiles {
 		if cfg.Profiles[i].Name == "core" {

@@ -82,11 +82,38 @@ go build -o ./weazlback-restore ./cmd/weazlback-restore
 ./weazlback recovery export --output /mnt/weazlback/weazlback-recovery.wzrk
 ./weazlback inventory --output ./weazlback-inventory.json
 ./weazlback applications --output /secure/path/applications.json
+./weazlback packages refresh
+./weazlback packages refresh --build-missing-aur
+./weazlback packages schedule --days 30
 ./weazlback benchmark --engine borg --fixture all
 ./weazlback benchmark --engine restic --fixture all
 ```
 
 To run the retained benchmark harness on Omarchy: `omarchy pkg add borg restic`.
+
+## Project Holley: Package Capsule
+
+Fresh metal should not spend its first hour begging mirrors for packages or compiling
+an AUR leviathan. The Package Capsule is a dedicated encrypted Restore Point holding
+curated Arch artifacts and the ledger needed to validate them. It is not part of
+Core or Home: routine backups never crawl Pacman, Yay, or Paru caches.
+
+Open **Profiles** and press `P` to harvest cached artifacts, download missing
+official packages, validate architecture and build flags, hash package signatures,
+and write `profile:packages` into the active Restic repository. Press `A` only after
+reading the warning: that path clones and executes missing AUR PKGBUILDs now so a
+fresh-system recovery does not compile them later. `S` enables an independent
+30-day refresh reminder; the CLI accepts another interval.
+
+Every capsule records installed and artifact versions, Arch install reason,
+official versus foreign provenance, `.PKGINFO`, `.BUILDINFO`, dependencies,
+providers, conflicts, enabled services, Flatpaks, hashes, and explicit exceptions.
+An incompatible architecture or `-march=native` artifact is rejected. A missing
+artifact stays a visible fallback item—it is never dressed up as recovery-ready.
+
+Successive capsules remain ordinary Restic incrementals. Unchanged package archives
+deduplicate inside the repository, while the normal Core and Home lanes retain their
+fast metadata footprint.
 
 ## Prime Vector Nugs: The Heavy Lane
 

@@ -11,6 +11,7 @@ import (
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/heavy"
 	"github.com/bprendie/weazlback/internal/inventory"
+	"github.com/bprendie/weazlback/internal/packagecapsule"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/restoretxn"
 	"github.com/bprendie/weazlback/internal/vault"
@@ -133,6 +134,10 @@ type Model struct {
 	restoreContentQuery  string
 	restoreLiveHints     []string
 	applications         *inventory.ApplicationManifest
+	packageManifest      *packagecapsule.Manifest
+	packageProgress      packagecapsule.Progress
+	packageStage         string
+	packageBuildAUR      bool
 	helpVisible          bool
 	heavyReport          heavy.Report
 	nukeStage            string

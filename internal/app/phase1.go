@@ -116,7 +116,7 @@ func backupCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	flags := flag.NewFlagSet("backup", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	destinationID := flags.String("destination", "", "destination ID")
-	profileName := flags.String("profile", "core", "core, home, or heavy")
+	profileName := flags.String("profile", "core", "core, home, or heavy (packages use `weazlback packages refresh`)")
 	dryRun := flags.Bool("dry-run", false, "show work without saving a snapshot")
 	connections := flags.Int("connections", 0, "parallel repository connections (0 uses destination/default)")
 	if err := flags.Parse(args); err != nil {

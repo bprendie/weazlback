@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/contracts"
 )
 
@@ -41,6 +42,9 @@ func scheduleCommand(ctx context.Context, args []string, stdout, stderr io.Write
 	status, err := store.Load()
 	if err != nil {
 		return err
+	}
+	if err := packageRefreshReminder(status); err != nil {
+		fmt.Fprintf(stderr, "warning: package refresh reminder deferred: %v\n", err)
 	}
 	last := status.LastRoutine
 	if last == nil {
@@ -86,6 +90,24 @@ func scheduleCommand(ctx context.Context, args []string, stdout, stderr io.Write
 	}
 	notifySchedule(status, "Backup destination is unreachable", "Retries at 5m, 15m, 1h, and 6h all failed.")
 	return err
+}
+
+func packageRefreshReminder(status contracts.Status) error {
+	path, err := config.Path()
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(path)
+	if err != nil || !cfg.PackagePolicy.Due(time.Now()) {
+		return err
+	}
+	if cfg.PackagePolicy.LastReminder != nil && time.Since(*cfg.PackagePolicy.LastReminder) < 24*time.Hour {
+		return nil
+	}
+	notifySchedule(status, "Weazlback Package Capsule", "Package artifacts are due for refresh. Open Profiles and press P.")
+	now := time.Now().UTC()
+	cfg.PackagePolicy.LastReminder = &now
+	return config.Save(path, cfg)
 }
 
 func batteryAllowsBackup() (bool, string) {

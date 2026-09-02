@@ -20,7 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const Version = "1.0.0-rc7"
+const Version = "1.0.0-rc8"
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
@@ -46,6 +46,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return heavyCommand(args[1:], stdout, stderr)
 	case "applications":
 		return applicationsCommand(ctx, args[1:], stdout, stderr)
+	case "packages":
+		return packagesCommand(ctx, args[1:], stdout, stderr)
 	case "benchmark":
 		return benchmarkCommand(ctx, args[1:], stdout, stderr)
 	case "browser":
@@ -239,6 +241,8 @@ weazlback rotate repository-key                 rotate repository encryption key
   weazlback inventory [--output P]  capture metadata-only inventory
   weazlback heavy inspect [--root P] inspect disks and refuse live writable data
   weazlback applications [--output P] capture application restore manifest
+  weazlback packages refresh [options] capture encrypted package artifacts
+  weazlback packages schedule --days N configure independent refresh reminders
   weazlback browser repair [--apply] inspect or clear validated stale browser locks
   weazlback benchmark --engine E [--fixture F] [--work-dir D] [--output P]
 	[--repository URL --ssh-key KEY --known-hosts FILE]

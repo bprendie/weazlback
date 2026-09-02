@@ -71,6 +71,35 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitOperation(msg.events)
 	case operationDoneMsg:
 		return m.operationFinished(msg)
+	case packageSudoDoneMsg:
+		if msg.err != nil {
+			m.packageStage, m.err, m.status = "", msg.err.Error(), "package authorization failed"
+			return m, nil
+		}
+		return m.beginPackageCapture()
+	case packageProgressMsg:
+		m.packageProgress = msg.progress
+		m.status = packageProgressStatus(msg.progress)
+		return m, waitPackageEvent(msg.events)
+	case packageDoneMsg:
+		m.busy, m.cancel, m.packageStage = false, nil, ""
+		if msg.err != nil {
+			m.err, m.status = msg.err.Error(), "Package Capsule failed"
+		} else {
+			m.packageManifest, m.err = &msg.manifest, ""
+			now := msg.manifest.CapturedAt
+			if path, err := config.Path(); err == nil {
+				latest, loadErr := config.Load(path)
+				if loadErr == nil {
+					latest.PackagePolicy.LastCaptured = &now
+					if config.Save(path, latest) == nil {
+						m.cfg = latest
+					}
+				}
+			}
+			m.status = fmt.Sprintf("Package Capsule saved — %d artifacts / %d exceptions", msg.manifest.Summary.Captured, len(msg.manifest.Exceptions))
+		}
+		return m, nil
 	case sshProbeMsg:
 		m.busy = false
 		if msg.err != nil {

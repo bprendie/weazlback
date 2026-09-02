@@ -54,6 +54,29 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.startRecoveryForm(false)
 		}
 	}
+	if m.mode == modeProfiles && !m.railFocused {
+		if m.packageStage == "confirm-aur" {
+			switch msg.String() {
+			case "enter":
+				return m.requestPackageCapture(true)
+			case "esc":
+				m.packageStage, m.status = "", "AUR capsule build cancelled"
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
+		switch msg.String() {
+		case "P":
+			return m.requestPackageCapture(false)
+		case "A":
+			m.packageStage = "confirm-aur"
+			m.status = "review AUR build warning"
+			return m, nil
+		case "S":
+			return m.togglePackageSchedule()
+		}
+	}
 	if msg.String() == "tab" || msg.String() == "shift+tab" {
 		m.railFocused = msg.String() == "tab" && !m.railFocused
 		if m.railFocused {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadMigratesAndPersistsStableMachineIdentity(t *testing.T) {
@@ -109,5 +110,35 @@ func TestHeavyRetentionIsIndependent(t *testing.T) {
 	}
 	if cfg.HeavyRetention == cfg.Retention {
 		t.Fatal("Heavy retention unexpectedly matches Core/Home")
+	}
+}
+
+func TestPackagePolicyDefaultsIndependentAndDisabled(t *testing.T) {
+	cfg := Default()
+	if cfg.PackagePolicy.Scheduled || cfg.PackagePolicy.IntervalDays != 30 || !cfg.PackagePolicy.DownloadOfficial {
+		t.Fatalf("package policy=%+v", cfg.PackagePolicy)
+	}
+	for _, profile := range cfg.Profiles {
+		if profile.Name == "packages" {
+			t.Fatal("package artifacts must not be a routine filesystem profile")
+		}
+	}
+}
+
+func TestPackagePolicyDueUsesIndependentCaptureClock(t *testing.T) {
+	now := time.Now()
+	policy := PackagePolicy{Scheduled: true, IntervalDays: 30}
+	if !policy.Due(now) {
+		t.Fatal("never-captured scheduled capsule is not due")
+	}
+	recent := now.Add(-29 * 24 * time.Hour)
+	policy.LastCaptured = &recent
+	if policy.Due(now) {
+		t.Fatal("recent capsule reported due")
+	}
+	old := now.Add(-31 * 24 * time.Hour)
+	policy.LastCaptured = &old
+	if !policy.Due(now) {
+		t.Fatal("old capsule not due")
 	}
 }
