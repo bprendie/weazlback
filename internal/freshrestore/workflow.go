@@ -6,21 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/bprendie/weazlback/internal/config"
+	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/restic"
 )
 
 type Restore struct {
-	Options     Options
-	Session     *Session
-	Plan        Plan
-	Journal     Journal
-	JournalPath string
-	StageDir    string
-	service     restic.Service
+	Options         Options
+	Session         *Session
+	Plan            Plan
+	Journal         Journal
+	JournalPath     string
+	StageDir        string
+	PackageStageDir string
+	service         restic.Service
 }
 
 func Prepare(ctx context.Context, options Options) (*Restore, error) {
@@ -32,6 +33,12 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	}
 	if options.Scope == "" {
 		options.Scope = "core"
+	}
+	if options.Engine == "" {
+		options.Engine = EngineStandard
+	}
+	if options.Engine != EngineStandard && options.Engine != EngineTurbo {
+		return nil, fmt.Errorf("invalid recovery engine %q", options.Engine)
 	}
 	if !validRecoveryScope(options.Scope) {
 		return nil, fmt.Errorf("invalid recovery scope %q", options.Scope)
@@ -108,6 +115,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	r.Plan = Plan{Snapshot: snapshot, OriginalHome: originalHome, TargetHome: options.TargetHome, Scope: options.Scope,
 		SourceMachineID: machineID, TargetMachineID: targetMachineID, AdoptSourceIdentity: options.AdoptSourceIdentity,
 		PersistTargetIdentity: options.PersistTargetIdentity}
+	r.Plan.PackageSnapshot = selectLatestPackageSnapshot(snapshots)
 	if options.Scope == "home" || options.Scope == "everything" {
 		home, selectErr := selectProfileSnapshotAt(snapshots, "home", snapshot.Time)
 		if selectErr != nil {
@@ -130,6 +138,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		return nil, err
 	}
 	r.Plan.SourceUID, r.Plan.SourceGID = snapshotOwner(files, filepath.Join(originalHome, ".config"))
+	requiredBytes := fileBytes(files)
 	r.Plan.TargetUID, r.Plan.TargetGID = pathOwner(options.TargetHome)
 	if r.Plan.HomeSnapshot != nil {
 		homeFiles, listErr := r.service.Files(ctx, session.Repository, r.Plan.HomeSnapshot.ID)
@@ -138,6 +147,9 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 			return nil, listErr
 		}
 		r.Plan.PlacementPaths = topLevelTargets(homeFiles, originalHome, options.TargetHome)
+		if homeBytes := fileBytes(homeFiles); homeBytes > requiredBytes {
+			requiredBytes = homeBytes
+		}
 	}
 	if r.Plan.HeavySnapshot != nil {
 		heavyFiles, listErr := r.service.Files(ctx, session.Repository, r.Plan.HeavySnapshot.ID)
@@ -146,6 +158,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 			return nil, listErr
 		}
 		r.Plan.HeavyPlacementPaths = topLevelTargets(heavyFiles, originalHome, options.TargetHome)
+		requiredBytes += fileBytes(heavyFiles)
 	}
 	manifest, err := r.restoreApplicationManifest(ctx)
 	if err != nil {
@@ -161,9 +174,30 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	}
 	r.Plan.Official, r.Plan.AUR, r.Plan.Flatpak = MissingApplications(ctx, manifest)
 	r.Plan.SystemServices, r.Plan.UserServices = MissingServices(ctx, manifest)
+	if r.Plan.PackageSnapshot != nil {
+		capsule, manifestPath, capsuleErr := r.loadPackageCapsule(ctx)
+		if capsuleErr != nil {
+			r.Close()
+			return nil, fmt.Errorf("load Package Capsule: %w", capsuleErr)
+		}
+		delta, deltaErr := resolvePackageDelta(ctx, capsule)
+		if deltaErr != nil {
+			r.Close()
+			return nil, fmt.Errorf("resolve Package Capsule delta: %w", deltaErr)
+		}
+		r.Plan.PackageCapsule, r.Plan.PackageManifestPath, r.Plan.PackageDelta = &capsule, manifestPath, delta
+		// A selected capsule supersedes legacy AUR files embedded in old Core
+		// manifests. Mixing generations would violate the planned ledger.
+		r.Plan.ArtifactFiles = nil
+		r.Plan.Official, r.Plan.AUR = append([]string(nil), delta.OfficialOnline...), append([]string(nil), delta.ForeignOnline...)
+		r.Plan.Flatpak = missing(capsule.Flatpaks, commandSet(ctx, "flatpak", "list", "--app", "--columns=application"))
+		capsuleApps := inventory.ApplicationManifest{Services: inventory.ServiceInventory{SystemEnabled: capsule.SystemUnits, UserEnabled: capsule.UserUnits}}
+		r.Plan.SystemServices, r.Plan.UserServices = MissingServices(ctx, capsuleApps)
+	}
 	r.Plan.LocalApps = append([]string(nil), manifest.WeazlApps...)
 	r.JournalPath = filepath.Join(options.WorkDir, session.Destination.ID+"-"+options.Scope+"-journal.json")
 	r.StageDir = filepath.Join(options.WorkDir, session.Destination.ID+"-"+options.Scope+"-stage")
+	r.PackageStageDir = r.StageDir + "-packages"
 	r.Journal, err = LoadJournal(r.JournalPath)
 	if err != nil {
 		r.Close()
@@ -181,6 +215,10 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		r.Close()
 		return nil, errors.New("existing restore journal belongs to another Heavy Restore Point")
 	}
+	if r.Plan.PackageSnapshot != nil && r.Journal.PackageSnapshotID != "" && r.Journal.PackageSnapshotID != r.Plan.PackageSnapshot.ID {
+		r.Close()
+		return nil, errors.New("existing restore journal belongs to another Package Capsule Restore Point")
+	}
 	if r.Journal.Scope != "" && r.Journal.Scope != options.Scope {
 		r.Close()
 		return nil, errors.New("existing restore journal belongs to another recovery scope")
@@ -197,88 +235,50 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	if r.Journal.Stage == "" {
 		r.Journal = Journal{RepositoryID: session.Destination.ID, SnapshotID: snapshot.ID,
 			Stage: "snapshot_selected", Hostname: r.Plan.Hostname, TargetHome: options.TargetHome,
-			Connections: r.Session.Repository.Connections, Scope: options.Scope}
+			Connections: r.Session.Repository.Connections, Scope: options.Scope, Engine: EngineStandard, RequestedEngine: EngineStandard}
 		if r.Plan.HomeSnapshot != nil {
 			r.Journal.HomeSnapshotID = r.Plan.HomeSnapshot.ID
 		}
 		if r.Plan.HeavySnapshot != nil {
 			r.Journal.HeavySnapshotID = r.Plan.HeavySnapshot.ID
 		}
+		if r.Plan.PackageSnapshot != nil {
+			r.Journal.PackageSnapshotID = r.Plan.PackageSnapshot.ID
+		}
+	}
+	if r.Journal.Stage == "snapshot_selected" {
+		r.configureEngine(requiredBytes)
 	}
 	err = SaveJournal(r.JournalPath, r.Journal)
 	return r, err
 }
 
+func (r *Restore) configureEngine(requiredBytes uint64) {
+	r.Journal.Engine, r.Journal.RequestedEngine = EngineStandard, EngineStandard
+	r.Journal.FallbackEngine, r.Journal.FallbackPhase, r.Journal.FallbackReason = "", "", ""
+	requestedTurbo := r.Options.Engine == EngineTurbo || (r.Options.RestoreEngine != nil && r.Options.RestoreEngine.Name() != EngineStandard)
+	if !requestedTurbo {
+		return
+	}
+	transport := "local"
+	if r.Session.Destination.Kind == "ssh" {
+		transport = "ssh"
+	}
+	sourcePath := ""
+	if transport == "local" {
+		sourcePath = r.Session.Repository.Location
+	}
+	r.Journal.Qualification = QualifyTurboSource(r.Options.TargetHome, sourcePath, transport, r.Options.TurboPolicy)
+	requireRestoreSpace(&r.Journal.Qualification, requiredBytes)
+	r.Journal.RequestedEngine = EngineTurbo
+	if r.Journal.Qualification.Eligible {
+		r.Journal.Engine = EngineTurbo
+		return
+	}
+	r.Journal.FallbackEngine, r.Journal.FallbackPhase = EngineStandard, "qualification"
+	r.Journal.FallbackReason = strings.Join(append(r.Journal.Qualification.HardFailures, r.Journal.Qualification.SoftFindings...), "; ")
+}
+
 func validRecoveryScope(scope string) bool {
 	return scope == "core" || scope == "home" || scope == "everything" || scope == "applications"
-}
-
-func topLevelTargets(files []restic.FileEntry, oldHome, targetHome string) []string {
-	var targets []string
-	for _, file := range files {
-		rel, err := filepath.Rel(oldHome, file.Path)
-		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			continue
-		}
-		first := strings.Split(rel, string(filepath.Separator))[0]
-		targets = appendUniqueStrings(targets, filepath.Join(targetHome, first))
-	}
-	sort.Strings(targets)
-	return targets
-}
-
-func appendUniqueStrings(values []string, additions ...string) []string {
-	seen := map[string]bool{}
-	for _, value := range values {
-		seen[value] = true
-	}
-	for _, value := range additions {
-		if !seen[value] {
-			values = append(values, value)
-			seen[value] = true
-		}
-	}
-	return values
-}
-
-func selectProfileSnapshot(snapshots []restic.Snapshot, profile string) (restic.Snapshot, error) {
-	sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].Time.After(snapshots[j].Time) })
-	for _, snapshot := range snapshots {
-		for _, tag := range snapshot.Tags {
-			if tag == "profile:"+profile {
-				return snapshot, nil
-			}
-		}
-	}
-	return restic.Snapshot{}, fmt.Errorf("no healthy %s Restore Point found", profile)
-}
-
-func snapshotOwner(files []restic.FileEntry, wanted string) (uint32, uint32) {
-	for _, file := range files {
-		if filepath.Clean(file.Path) == filepath.Clean(wanted) {
-			return file.UID, file.GID
-		}
-	}
-	return 0, 0
-}
-
-func (r *Restore) Close() { r.Session.Close() }
-
-func (r *Restore) StagePreview(ctx context.Context) (string, error) {
-	target := filepath.Join(r.Options.WorkDir, "preview-"+r.Plan.Snapshot.ShortID)
-	_ = os.RemoveAll(target)
-	if err := os.MkdirAll(target, 0o700); err != nil {
-		return "", err
-	}
-	if err := r.restoreSelection(ctx, target, true); err != nil {
-		return "", err
-	}
-	originalStage := r.StageDir
-	r.StageDir = target
-	err := r.validateStage()
-	r.StageDir = originalStage
-	if err != nil {
-		return "", err
-	}
-	return target, nil
 }

@@ -37,12 +37,16 @@ func (m Model) body() string {
 		return m.input.View() + errorText(m.err)
 	case "hostname-choice":
 		return "HOSTNAME\n\n[o / enter] original hostname (best application compatibility)\n[c] current fresh-system hostname\n[n] enter a new hostname"
+	case "engine-choice":
+		return "RECOVERY ENGINE\n\n[s / enter] Standard — official Restic recovery authority\n[t] Turbo — authenticated embedded pack reader, bounded RAM, maximum local I/O\n\nTurbo aggressively consumes CPU, memory, source I/O, and target I/O. Do not use the machine during recovery. Any failed safety gate falls back to Standard."
+	case "turbo-network":
+		return "TURBO SSH POLICY\n\n[r / enter] Respect the configured transfer ceiling\n[f] Full link — remove the configured ceiling for this recovery\n\nFull link can saturate the network. This choice is recorded in the recovery journal."
 	case "scope-choice":
 		adoption := "off — preserve this machine's identity"
 		if m.adoptIdentity {
 			adoption = "ON — this replacement continues the source identity"
 		}
-		return "RECOVERY SCOPE\n\n[c] Core — settings, Weazl apps, packages, services, hostname\n[h / enter] Home — Core plus normal home files (recommended)\n[e] Everything — Core plus Home and large/heavy data\n\n[a] Replacement identity: " + adoption
+		return "RECOVERY SCOPE\n\n[c] Core — settings, applications, packages, services, hostname\n[h / enter] Home — Core + applications + normal home files (recommended)\n[e] Everything — Core + applications + Home + VMs / containers / Heavy data\n\n[a] Replacement identity: " + adoption
 	case "target-identity":
 		return "TARGET MACHINE IDENTITY\n\n[c / enter] Keep this installation's identity\n[n] Generate a new independent machine identity\n[a] Replacement hardware — explicitly adopt the selected source identity\n\nHostname is selected separately on the next screen."
 	case "action-choice":
@@ -50,7 +54,7 @@ func (m Model) body() string {
 		if m.catalogPath != "" {
 			catalogState = "encrypted catalog ready at " + m.catalogPath
 		}
-		return "RECOVERY WORKSPACE\n\n[c] System Config\n[h / enter] Personal Files + System Config\n[e] Everything, including VMs / Containers\n[a] Applications only\n[f] Select one file or directory\n[i] Build optional encrypted history catalog\n\nSource identity  " + m.machineID + "\nTarget identity  " + targetIdentityText(m) + "\nCatalog          " + catalogState
+		return "RECOVERY WORKSPACE\n\n[c] System Config + Applications\n[h / enter] Personal Files + System Config + Applications\n[e] Everything: Applications + System Config + Home + VMs / Containers\n[a] Applications only\n[f] Select one file or directory\n[i] Build optional encrypted history catalog\n\nSource identity  " + m.machineID + "\nTarget identity  " + targetIdentityText(m) + "\nCatalog          " + catalogState
 	case "destination-loading":
 		return "◉ Unlocking recovery kit and reading destinations…"
 	case "identity-loading":
@@ -85,7 +89,18 @@ func (m Model) body() string {
 		p := m.restore.Plan
 		start := min(m.reviewIndex, max(0, len(m.review)-1))
 		end := min(len(m.review), start+9)
-		return freshrestore.PlanText(p) + fmt.Sprintf("\nManual review  %d items\n\nEXACT RESTORE QUEUE [%d/%d]\n%s\n\n↑/↓ review all • enter continue", len(p.Applications.ManualReview), start+1, len(m.review), strings.Join(m.review[start:end], "\n"))
+		engine := "\nEngine         Standard"
+		if m.engine == freshrestore.EngineTurbo {
+			q := m.restore.Journal.Qualification
+			engine = fmt.Sprintf("\nEngine         %s (eligible: %t)\nMemory budget  %.1f GiB\nSource         %s %s\nTarget         %s %s", strings.ToUpper(m.restore.Journal.Engine), q.Eligible, float64(q.Budget.MemoryBudget)/(1<<30), q.SourceTransport, q.SourceDevice, q.TargetFilesystem, q.TargetDevice)
+			for _, finding := range append(q.HardFailures, q.SoftFindings...) {
+				engine += "\nFinding        " + finding
+			}
+			if len(q.HardFailures) == 0 && len(q.SoftFindings) > 0 && !q.BreakGlassApplied {
+				engine += "\n[b] Accept soft findings with break glass"
+			}
+		}
+		return freshrestore.PlanText(p) + engine + fmt.Sprintf("\nManual review  %d items\n\nEXACT RESTORE QUEUE [%d/%d]\n%s\n\n↑/↓ review all • enter continue", len(m.review), start+1, len(m.review), strings.Join(m.review[start:end], "\n"))
 	case "running":
 		return m.progressView()
 	case "done":
@@ -93,7 +108,11 @@ func (m Model) body() string {
 		if !m.report.Complete {
 			result = "Restore incomplete — review exceptions"
 		}
-		return fmt.Sprintf("%s\nPlaced paths   %d\nBrowser locks  %d removed / %d live\nExceptions     %d\nJournal        %s", result, len(m.report.RestoredPaths), m.report.BrowserRepair.Removed, m.report.BrowserRepair.Live, len(m.report.PackageErrors)+len(m.report.BrowserIssues), m.report.JournalPath) + errorText(m.err)
+		capsule := fmt.Sprintf("%d installed / %d online fallback", len(m.report.CapsuleInstalled), len(m.report.CapsuleFallback))
+		if m.report.CapsuleFallbackReason != "" {
+			capsule += "\nFallback       " + m.report.CapsuleFallbackReason
+		}
+		return fmt.Sprintf("%s\nEngine         %s\nUsable         %s\nDurable        %s\nPlaced paths   %d\nCapsule local  %s\nBrowser locks  %d removed / %d live\nExceptions     %d\nJournal        %s", result, strings.ToUpper(m.report.Engine), m.report.Timing.TimeToUsable.Round(time.Second), m.report.Timing.TimeToDurable.Round(time.Second), len(m.report.RestoredPaths), capsule, m.report.BrowserRepair.Removed, m.report.BrowserRepair.Live, len(m.report.PackageErrors)+len(m.report.BrowserIssues), m.report.JournalPath) + errorText(m.err)
 	default:
 		return "Starting recovery…"
 	}
@@ -215,83 +234,9 @@ func truncate(value string, width int) string {
 	return value[:width-1] + "…"
 }
 
-func (m Model) progressView() string {
-	elapsed := time.Since(m.started).Round(time.Second)
-	filesystem := laneView("FILESYSTEM / "+strings.ToUpper(m.filesystemProgress.Lane), m.filesystemProgress, false)
-	applications := laneView("APPLICATIONS / "+strings.ToUpper(m.appProgress.Lane), m.appProgress, true)
-	browser := laneView("BROWSER COMPATIBILITY", m.browserProgress, true)
-	return filesystem + "\n\n" + applications + "\n\n" + browser + "\n\nElapsed " + elapsed.String() + "  •  resumable journal active"
-}
-
-func laneView(title string, p freshrestore.RestoreProgress, failures bool) string {
-	if p.Total <= 0 {
-		label := p.Current
-		if label == "" {
-			label = "waiting for measured totals"
-		}
-		return title + "\n" + label + "\n[▓▒░▒▓▒░▒▓▒░▒▓▒░▒▓▒░▒▓▒░▒▓▒░]"
-	}
-	resolved := p.Completed
-	if failures {
-		resolved += p.Failed
-	}
-	percent := min(100, resolved*100/p.Total)
-	filled := percent * 28 / 100
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", 28-filled)
-	detail := fmt.Sprintf("%d / %d", resolved, p.Total)
-	if p.BytesTotal > 0 {
-		detail += fmt.Sprintf("  •  %.1f / %.1f GiB", float64(p.BytesDone)/(1<<30), float64(p.BytesTotal)/(1<<30))
-	}
-	if p.BytesPerSecond > 0 {
-		detail += "  •  " + restoreRate(p.BytesPerSecond)
-	}
-	if p.FilesPerSecond > 0 {
-		detail += fmt.Sprintf("  •  %.1f files/s", p.FilesPerSecond)
-	}
-	if failures && p.Failed > 0 {
-		detail += fmt.Sprintf("  •  %d exceptions", p.Failed)
-	}
-	return fmt.Sprintf("%s\n%s\n[%s] %d%%\n%s", title, p.Current, bar, percent, detail)
-}
-
-func restoreRate(value float64) string {
-	if value >= 1<<30 {
-		return fmt.Sprintf("%.1f GiB/s", value/(1<<30))
-	}
-	if value >= 1<<20 {
-		return fmt.Sprintf("%.1f MiB/s", value/(1<<20))
-	}
-	if value >= 1<<10 {
-		return fmt.Sprintf("%.1f KiB/s", value/(1<<10))
-	}
-	return fmt.Sprintf("%.0f B/s", value)
-}
-
 func errorText(value string) string {
 	if value == "" {
 		return ""
 	}
 	return "\n\n" + lipgloss.NewStyle().Foreground(pink).Render(value)
-}
-
-func reviewLines(plan freshrestore.Plan) []string {
-	var lines []string
-	add := func(label string, values []string) {
-		for _, value := range values {
-			lines = append(lines, fmt.Sprintf("%-9s %s", label, value))
-		}
-	}
-	add("OFFICIAL", plan.Official)
-	add("AUR", plan.AUR)
-	add("FLATPAK", plan.Flatpak)
-	add("SYSTEM", plan.SystemServices)
-	add("USER", plan.UserServices)
-	add("LOCALAPP", plan.LocalApps)
-	if plan.Applications != nil {
-		add("REVIEW", plan.Applications.ManualReview)
-	}
-	if len(lines) == 0 {
-		lines = append(lines, "No application changes required")
-	}
-	return lines
 }

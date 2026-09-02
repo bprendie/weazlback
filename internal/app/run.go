@@ -20,7 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const Version = "1.0.0-rc8"
+const Version = "1.0.0-rc14"
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
@@ -138,13 +138,15 @@ func inventoryCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 func benchmarkCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("benchmark", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	engine := flags.String("engine", "", "borg or restic")
-	fixture := flags.String("fixture", "all", "all, tiny, mixed, raw, or qcow2")
+	engine := flags.String("engine", "", "borg, restic, or turbo")
+	fixture := flags.String("fixture", "all", "all, tiny, mixed, raw, qcow2, or metadata")
 	workDir := flags.String("work-dir", ".weazlback-bench", "writable benchmark filesystem")
 	output := flags.String("output", "", "write JSON report")
 	repository := flags.String("repository", "", "optional remote repository base URL")
 	sshKey := flags.String("ssh-key", "", "SSH private key for remote benchmark")
 	knownHosts := flags.String("known-hosts", "", "pinned OpenSSH known_hosts file")
+	trials := flags.Int("trials", 1, "restore trials; use 3 or more for median dyno results")
+	connections := flags.Int("connections", 4, "repository connections for Turbo trials")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -153,7 +155,7 @@ func benchmarkCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 	}
 	report, err := benchmark.Run(ctx, benchmark.Options{
 		Engine: *engine, Fixture: *fixture, WorkDir: *workDir, Output: *output,
-		Repository: *repository, SSHKey: *sshKey, KnownHosts: *knownHosts,
+		Repository: *repository, SSHKey: *sshKey, KnownHosts: *knownHosts, Trials: *trials, Connections: *connections,
 	}, func(message string) { fmt.Fprintln(stderr, message) })
 	if err != nil {
 		return err

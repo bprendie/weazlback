@@ -174,12 +174,12 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "hostname-choice":
 		if key == "enter" || key == "o" {
-			m.hostname, m.stage = "original", "loading"
-			return m, m.prepare(false)
+			m.hostname, m.stage = "original", "engine-choice"
+			return m, nil
 		}
 		if key == "c" {
-			m.hostname, m.stage = "current", "loading"
-			return m, m.prepare(false)
+			m.hostname, m.stage = "current", "engine-choice"
+			return m, nil
 		}
 		if key == "n" {
 			m.input = textinput.New()
@@ -190,9 +190,34 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "hostname-custom":
 		if key == "enter" && strings.TrimSpace(m.input.Value()) != "" {
-			m.hostname, m.stage = strings.TrimSpace(m.input.Value()), "loading"
+			m.hostname, m.stage = strings.TrimSpace(m.input.Value()), "engine-choice"
+			return m, nil
+		}
+	case "engine-choice":
+		if key == "enter" || key == "s" {
+			m.engine, m.stage = "standard", "loading"
 			return m, m.prepare(false)
 		}
+		if key == "t" {
+			m.engine = "turbo"
+			if m.destinationIsSSH() {
+				m.stage = "turbo-network"
+				return m, nil
+			}
+			m.stage = "loading"
+			return m, m.prepare(false)
+		}
+		return m, nil
+	case "turbo-network":
+		if key == "enter" || key == "r" {
+			m.turboFullLink, m.stage = false, "loading"
+			return m, m.prepare(false)
+		}
+		if key == "f" {
+			m.turboFullLink, m.stage = true, "loading"
+			return m, m.prepare(false)
+		}
+		return m, nil
 	case "access":
 		if key == "a" {
 			return m.authorizeAdoption()
@@ -219,9 +244,13 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.reviewIndex = max(0, m.reviewIndex-1)
 		} else if key == "down" || key == "j" {
 			m.reviewIndex = min(max(0, len(m.review)-1), m.reviewIndex+1)
+		} else if key == "b" && m.engine == "turbo" && len(m.restore.Journal.Qualification.HardFailures) == 0 && len(m.restore.Journal.Qualification.SoftFindings) > 0 {
+			m.restore.Close()
+			m.restore, m.turboBreakGlass, m.stage = nil, true, "loading"
+			return m, m.prepare(false)
 		} else if key == "enter" {
 			m.input = textinput.New()
-			m.input.Prompt = "type RESTORE > "
+			m.input.Prompt = "type " + m.confirmationPhrase() + " > "
 			m.input.Focus()
 			m.stage = "confirm"
 			return m, textinput.Blink
@@ -229,8 +258,8 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "confirm":
 		if key == "enter" {
-			if m.input.Value() != "RESTORE" {
-				m.err = "confirmation must be exactly RESTORE"
+			if m.input.Value() != m.confirmationPhrase() {
+				m.err = "confirmation must be exactly " + m.confirmationPhrase()
 				return m, nil
 			}
 			m.stage = "authorizing"
@@ -247,4 +276,11 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	return m, cmd
+}
+
+func (m Model) confirmationPhrase() string {
+	if m.engine == "turbo" {
+		return "TURBO RESTORE"
+	}
+	return "RESTORE"
 }

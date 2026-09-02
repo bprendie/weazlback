@@ -27,6 +27,13 @@ func main() {
 		return
 	}
 	if len(os.Args) == 1 {
+		if os.Getenv("WEAZLBACK_RESTORE_SESSION") == "" {
+			if attached, err := attachRecoverySession(); err != nil {
+				fatal(err)
+			} else if attached {
+				return
+			}
+		}
 		kit := filepath.Join(filepath.Dir(os.Args[0]), "weazlback-recovery.wzrk")
 		if _, err := os.Stat(filepath.Join(filepath.Dir(os.Args[0]), "SHA256SUMS")); err == nil {
 			if err := recovery.VerifyMediaDirectory(filepath.Dir(os.Args[0])); err != nil {
@@ -56,6 +63,10 @@ func main() {
 	repository := flag.String("repository", "", "override the local repository mount path")
 	adoptLocal := flag.Bool("adopt-local-repository", false, "use sudo to adopt the exact local repository for this user")
 	adoptIdentity := flag.Bool("adopt-source-identity", false, "make this replacement system continue the selected source machine identity")
+	engine := flag.String("engine", "standard", "recovery engine: standard or turbo")
+	turboMemory := flag.Int("turbo-memory-percent", 70, "Turbo memory ceiling as a percentage of available memory (10-70)")
+	turboBreakGlass := flag.Bool("turbo-break-glass", false, "accept documented soft Turbo qualification findings")
+	turboRecompress := flag.Bool("turbo-recompress", false, "recompress placed Btrfs files with zstd:1 after durability")
 	nukeRepository := flag.Bool("nuke-repository", false, "break glass: destroy this kit's repository and keys")
 	nukeKeysOnly := flag.Bool("nuke-keys-only", false, "with --nuke-repository, destroy keys but preserve repository ciphertext")
 	nukeRemoveDirectory := flag.Bool("nuke-remove-local-directory", false, "with --nuke-repository, remove the exact local repository directory")
@@ -83,12 +94,22 @@ func main() {
 		RecoveryPath: *recovery, Destination: *destination, Passphrase: passphrase, Snapshot: *snapshot, Hostname: *hostname, Scope: *scope,
 		TargetHome: *targetHome, WorkDir: *workDir, Yes: *yes, DryRun: *planOnly, Connections: *connections,
 		Repository: *repository, AdoptLocal: *adoptLocal, AdoptSourceIdentity: *adoptIdentity,
+		Engine: *engine, TurboPolicy: freshrestore.TurboPolicy{MemoryPercent: *turboMemory, BreakGlass: *turboBreakGlass, Recompress: *turboRecompress},
 	})
 	if err != nil {
 		fatal(err)
 	}
 	defer restore.Close()
 	fmt.Println("\n" + freshrestore.PlanText(restore.Plan))
+	if *engine == freshrestore.EngineTurbo {
+		qualification := restore.Journal.Qualification
+		fmt.Printf("Engine         %s (eligible: %t)\n", restore.Journal.Engine, qualification.Eligible)
+		fmt.Printf("Turbo memory   %.1f GiB / %d%% ceiling\n", float64(qualification.Budget.MemoryBudget)/(1<<30), *turboMemory)
+		fmt.Printf("Target         %s on %s\n", qualification.TargetFilesystem, qualification.TargetDevice)
+		for _, finding := range append(qualification.HardFailures, qualification.SoftFindings...) {
+			fmt.Printf("Finding        %s\n", finding)
+		}
+	}
 	if len(restore.Plan.Applications.ManualReview) > 0 {
 		fmt.Printf("Manual review  %d items\n", len(restore.Plan.Applications.ManualReview))
 	}
@@ -125,6 +146,22 @@ func main() {
 		fmt.Printf("\nRestore %s: %d paths placed; %d browser locks removed; %d exceptions.\n", status, len(report.RestoredPaths), report.BrowserRepair.Removed, len(report.PackageErrors)+len(report.BrowserIssues))
 		fmt.Printf("Journal: %s\n", report.JournalPath)
 	}
+}
+
+func attachRecoverySession() (bool, error) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		return false, nil
+	}
+	binary, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		return false, err
+	}
+	if output, err := exec.Command("tmux", "display-message", "-p", "-t", "weazlback-restore", "#{pane_dead}").Output(); err == nil && strings.TrimSpace(string(output)) == "1" {
+		_ = exec.Command("tmux", "kill-session", "-t", "weazlback-restore").Run()
+	}
+	command := exec.Command("tmux", "new-session", "-A", "-s", "weazlback-restore", "env", "WEAZLBACK_RESTORE_SESSION=1", binary)
+	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return true, command.Run()
 }
 
 func recoveryNuke(kitPath string, passphrase []byte, keysOnly, removeDirectory bool) error {

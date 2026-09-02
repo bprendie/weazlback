@@ -2,12 +2,15 @@ package benchmark
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	bridge "github.com/restic/restic/weazlbridge"
 )
 
 type engine interface {
@@ -31,9 +34,38 @@ func selectEngine(options Options) (engine, error) {
 		return borgEngine{sshArgs: sshArgs}, nil
 	case "restic":
 		return resticEngine{sshArgs: sshArgs}, nil
+	case "turbo":
+		return turboEngine{resticEngine: resticEngine{sshArgs: sshArgs}, connections: options.Connections}, nil
 	default:
-		return nil, fmt.Errorf("engine must be borg or restic")
+		return nil, fmt.Errorf("engine must be borg, restic, or turbo")
 	}
+}
+
+type turboEngine struct {
+	resticEngine
+	connections int
+}
+
+func (turboEngine) name() string { return "turbo" }
+func (turboEngine) version(context.Context) (string, error) {
+	return "embedded restic " + bridge.UpstreamVersion, nil
+}
+func (e turboEngine) restore(ctx context.Context, repo, target string) error {
+	out, err := commandOutput(ctx, benchmarkEnv("RESTIC_PASSWORD"), "restic", e.args(repo, "snapshots", "--latest", "1", "--json")...)
+	if err != nil {
+		return err
+	}
+	var snapshots []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(out), &snapshots); err != nil {
+		return fmt.Errorf("resolve benchmark snapshot: %w", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].ID == "" {
+		return fmt.Errorf("resolve benchmark snapshot: expected one snapshot, got %d", len(snapshots))
+	}
+	_, err = bridge.Restore(ctx, bridge.Options{Repository: repo, Password: "weazlback-phase-zero-benchmark-only", Snapshot: snapshots[0].ID, Target: target, SSHArgs: e.sshArgs, Connections: e.connections})
+	return err
 }
 
 type borgEngine struct{ sshArgs string }

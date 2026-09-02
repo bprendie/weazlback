@@ -49,6 +49,40 @@ func TestWideViewUsesFullBanner(t *testing.T) {
 	}
 }
 
+func TestWideBannerUsesGradientAndDiagonalFrames(t *testing.T) {
+	loadOmarchyPalette()
+	banner := renderLogo(100)
+	plain := stripANSIForTest(banner)
+	for _, line := range strings.Split(plain, "\n") {
+		if !strings.HasPrefix(line, "╱╱╱╱╱╱ ") || !strings.Contains(line, " ╱") {
+			t.Fatalf("banner line is not diagonally framed: %q", line)
+		}
+	}
+	stops := gradientStops(accent, secondary, warning, success)
+	if sampleGradient(0, stops) == sampleGradient(0.5, stops) || sampleGradient(0.5, stops) == sampleGradient(1, stops) {
+		t.Fatal("banner gradient stops collapsed to one color")
+	}
+}
+
+func stripANSIForTest(value string) string {
+	var out strings.Builder
+	escape := false
+	for _, r := range value {
+		if r == '\x1b' {
+			escape = true
+			continue
+		}
+		if escape {
+			if r == 'm' {
+				escape = false
+			}
+			continue
+		}
+		out.WriteRune(r)
+	}
+	return out.String()
+}
+
 func TestNarrowViewUsesCompactHeader(t *testing.T) {
 	m := New()
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})

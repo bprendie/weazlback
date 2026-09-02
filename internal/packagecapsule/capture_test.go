@@ -137,3 +137,34 @@ func TestValidateRejectsArtifactTamperingAndPathEscape(t *testing.T) {
 		t.Fatalf("escape error=%v", err)
 	}
 }
+
+func TestVerifyRestoredArtifactsRechecksIdentityAndSignature(t *testing.T) {
+	root := t.TempDir()
+	artifact := filepath.Join(root, "alpha-1.0-1-x86_64.pkg.tar.zst")
+	signature := artifact + ".sig"
+	if err := os.WriteFile(artifact, []byte("package"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(signature, []byte("signature"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	artifactHash, _ := digest(artifact)
+	signatureHash, _ := digest(signature)
+	manifest := Manifest{SchemaVersion: SchemaVersion, CapturedAt: time.Now(), Hostname: "host", Packages: []Package{{
+		Name: "alpha", Installed: "1.0-1", ArtifactVersion: "1.0-1", Architecture: "any", Source: "official",
+		Artifact: filepath.Base(artifact), SHA256: artifactHash, Compatible: true, Signature: filepath.Base(signature),
+		SignatureSHA256: signatureHash, SignatureValid: true,
+	}}, Summary: Summary{Installed: 1, Captured: 1}}
+	runner := &fakeRunner{outputs: map[string]string{}}
+	files, err := VerifyArtifacts(root, manifest, runner)
+	if err != nil || files["alpha"] != artifact {
+		t.Fatalf("files=%v err=%v", files, err)
+	}
+	if len(runner.runs) != 1 || runner.runs[0][0] != "pacman-key" {
+		t.Fatalf("signature verification calls=%v", runner.runs)
+	}
+	manifest.Packages[0].Name = "beta"
+	if _, err := VerifyArtifacts(root, manifest, runner); err == nil || !strings.Contains(err.Error(), "identity mismatch") {
+		t.Fatalf("identity error=%v", err)
+	}
+}

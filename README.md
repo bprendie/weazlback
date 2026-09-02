@@ -115,6 +115,60 @@ Successive capsules remain ordinary Restic incrementals. Unchanged package archi
 deduplicate inside the repository, while the normal Core and Home lanes retain their
 fast metadata footprint.
 
+On fresh metal, recovery inventories the packages already supplied by the current
+Omarchy ISO before installing anything. Arch's own version rules decide the delta:
+an equal or newer compatible package stays put, while a missing or older package is
+eligible for the capsule. Every selected artifact is extracted into private staging,
+rehash-checked, reinspected for package identity and architecture, and signature-
+verified when a signature was captured. Pacman then receives one coordinated local
+transaction—never a cache wildcard and never a forced overwrite—so its package
+ledger remains authoritative.
+
+Package Capsule extraction and installation run beside filesystem recovery. Fresh
+System Recovery exposes separate **Filesystem**, **Package Capsule**, and
+**Applications** lanes so a slow mirror or AUR fallback cannot hide data progress.
+If Pacman rejects the curated local transaction, the affected official and foreign
+packages move visibly to their normal online lanes. The selected package Restore
+Point and its timestamp are disclosed independently from Core and Home; recovery
+never quietly mixes artifacts from different capsule generations.
+
+### Holley Recovery Foundation
+
+Fresh recovery records a private mode-0600 schema-v2 journal with the requested engine,
+qualification result, exact fallback phase, resource budget, time to usable, and
+time to fully durable. Schema-v1 recovery journals remain readable and migrate to
+the Standard engine without discarding resumable state. Completion now includes a
+per-filesystem `syncfs`; bytes merely accepted by Linux's page cache are not called
+durable.
+
+Turbo can be selected explicitly in the Fresh Recovery TUI or exercised from
+recovery media with `--engine turbo`. Standard remains the default. Turbo budgets
+at most 70% of `MemAvailable` while respecting cgroup
+limits, checks transport, target mount, metadata suitability, free-space margin,
+and records every break-glass soft override. On Btrfs it uses a private,
+compression-disabled, same-filesystem staging subvolume for atomic landing. Any
+qualification, staging, or cross-device placement failure is journaled before the
+official Restic Standard path takes control.
+
+Turbo's reader is a deliberately narrow bridge to pinned Restic v0.19.1 code. It
+opens the same canonical local or SFTP repository read-only (apart from Restic's
+transient lock), authenticates repository objects before materialization, and uses
+Restic's pack-ordered bounded workers and sparse writer. There is no second mirror,
+repacked backup, or home-grown cryptography. The TUI reports logical output rate
+separately from actual repository source/wire rate.
+
+For retained dyno trials, compare official Standard and embedded Turbo with medians:
+
+```sh
+weazlback benchmark --engine restic --fixture all --trials 3
+weazlback benchmark --engine turbo --fixture all --trials 3 --connections 4
+```
+
+Turbo is promoted per workload only after it beats Standard without metadata,
+sparse-allocation, authentication, cancellation, or durability regressions. A
+workload that misses the performance gate stays on Standard; Holley does not cook
+the scoreboard.
+
 ## Prime Vector Nugs: The Heavy Lane
 
 Heavy data is a separate, deduplicated lane exclusively for VM and container assets. Weazlback is merciless here: before firing a Heavy backup, it sweeps the configured roots for writable open files. If a VM or container is live, it hard-refuses the capture. Stop the workload and retry. There is no unsafe override.
@@ -219,11 +273,16 @@ Recovery scopes are intentionally blunt and legible:
 
 * **Core:** Settings, dotfiles, widgets, Weazl apps, application manifests, services, and hostname—the fastest path back to a usable rig.
 * **Home:** Core plus normal home files. This is the recommended fresh-system restore.
-* **Everything:** Core, Home, and the Heavy lane containing VMs and container assets.
+* **Everything:** Applications in parallel with Core, Home, and the Heavy lane containing VMs and container assets.
 * **Applications:** Reconciles the chosen identity's package and service manifest without placing filesystem bundles.
 * **Selective:** Browses one Restore Point immediately and restores one file or directory through the same rollback-preserving transaction engine. Building the cross-time catalog is optional.
 
-Filesystem placement and application reconciliation run in parallel. Slow AUR builds do not hold your home directory hostage, and the interface shows independent progress lanes. Package conflicts, unavailable services, and manual-review items are exceptions—not permission to pretend the restore was clean. The final journal tells you what landed and what still needs human judgment.
+Filesystem placement, Package Capsule reconciliation, and online application fallback
+run in parallel. Slow AUR builds do not hold your home directory hostage, and the
+interface shows independent progress lanes. Package conflicts, unavailable services,
+and manual-review items are exceptions—not permission to pretend the restore was
+clean. The final journal tells you what landed locally, what fell back online, and
+what still needs human judgment.
 
 For a zero-mutation drill, use the explicit inspection flags:
 
@@ -285,3 +344,106 @@ weazlback tune --connections 10 --upload-limit-mib 0
 ```
 
 Each destination keeps its own connection count and upload ceiling. Local repositories remain unlimited unless their storage path imposes its own limits.
+
+## Appendix: Turbo Recovery Under the Hood
+
+Standard recovery is the stock car: conservative, proven, and always waiting in
+the pits. Turbo is the forced-induction path for fresh metal with a fast local or
+SFTP source, enough memory, and a destination filesystem that can take the hit.
+It attacks restore wall time without creating a restore-only mirror, changing the
+repository format, or weakening Restic's encryption.
+
+Turbo is explicit. Select it during Fresh System Recovery; Weazlback never silently
+turns it on. Before the destructive confirmation it qualifies the source,
+destination, free space, filesystem semantics, available memory, cgroup limits,
+and repository format. Hard failures cannot be overridden. Soft findings require
+the visible break-glass path, and any runtime failure is journaled before Standard
+recovery takes control.
+
+### The boost path
+
+```text
+encrypted Restic packs
+        │
+        ▼
+authenticated pack-ordered readers ── actual source / wire meter
+        │
+        ▼
+bounded decrypt + sparse writers ───── logical output meter
+        │
+        ▼
+private Btrfs landing subvolume
+        │
+        ▼
+Core over Home composition ─────────── applications run in parallel
+        │
+        ▼
+metadata audit → syncfs → durable
+```
+
+The embedded reader is a narrow bridge to pinned Restic v0.19.1 code under its BSD
+license. Restic still parses indexes and trees, authenticates encrypted objects,
+orders required blobs by repository pack, bounds workers by the selected connection
+count, and preserves sparse zero regions. Weazlback supplies the vaulted repository
+password and pinned SSH identity directly in memory. The remote target remains dumb
+storage; it does not need Restic installed.
+
+Turbo may reserve no more than 70% of currently available memory, reduced further
+by cgroup limits and safety constraints. That is a ceiling shared by metadata,
+pack reads, decrypted work, and queues—not a 200 GB RAM disk. Linux page cache still
+does its job, and bounded backpressure keeps a fast USB source from turning the OOM
+killer into a scheduler.
+
+On a qualifying Btrfs target, Turbo creates a private same-filesystem staging
+subvolume and disables compression during the critical landing. Home materializes
+first, newer Core content overlays it, and final placement avoids a cross-device
+copy. Optional recompression happens only after the durability milestone. Other
+filesystems and failed staging conditions fall back to Standard rather than
+pretending to be fast.
+
+Applications are a separate lane, not a tailpipe bolted onto filesystem recovery.
+Package Capsule extraction, Pacman's coordinated local transaction, online package
+fallback, and filesystem placement overlap where safe. Pacman remains the dependency
+authority and receives one batch transaction; the TUI parses its real `(n/total)`
+events instead of faking package percentages.
+
+### Honest gauges
+
+Turbo shows two rates because one giant number would be dyno fraud:
+
+* **Source/wire rate** is encrypted data actually read from the local repository or
+  SSH connection.
+* **Output rate** is authenticated logical plaintext materialized on the target.
+
+Output may exceed input when repository data decompresses, sparse regions require
+little physical I/O, or duplicate content is reused. Neither number is the old
+deduplicated “187 GB in 30 seconds” fantasy meter.
+
+Time to usable and time to fully durable are also separate. Usable means the chosen
+Core/Home payload has landed and passed its audit. Durable means every selected
+filesystem lane has completed authenticated placement, metadata verification, and
+`syncfs`. Heavy data and package exceptions remain visible; page-cache acceptance
+alone never earns a victory light.
+
+### Measured physical result
+
+An anonymized fresh-metal Everything drill restored roughly 250 GB from fast local
+USB-C storage onto a four-core ultraportable with 32 GB RAM and a PCIe Gen3 NVMe:
+
+| Path | Total wall time | Relative result |
+|---|---:|---:|
+| Earlier Standard recovery baseline | ~17m30s | 1.00x |
+| Turbo Everything recovery | **7m51s** | **2.23x effective throughput** |
+| Reduction | **~9m39s** | **55.1% less wall time** |
+
+During the successful Turbo run, encrypted input held near 425 MB/s, logical output
+held near 550 MB/s, and CPU utilization stayed around 80%. Application discovery
+took roughly 20 seconds; Pacman's coordinated installation occupied about three
+minutes while filesystem recovery continued beside it. The restored system,
+applications, settings, Home data, and Heavy payload all completed successfully.
+
+That is one real physical result, not a universal promise. CPU generation, USB link
+negotiation, repository compression, package delta, source media, destination
+filesystem, and thermal limits all move the needle. Standard remains available at
+every launch. Turbo earns its name by exposing the mechanics and falling back cleanly—not
+by cooking the stopwatch.

@@ -19,8 +19,14 @@ func LoadJournal(path string) (Journal, error) {
 	if err != nil {
 		return journal, err
 	}
-	if err := json.Unmarshal(b, &journal); err != nil || journal.SchemaVersion != JournalSchemaVersion {
+	if err := json.Unmarshal(b, &journal); err != nil || (journal.SchemaVersion != 1 && journal.SchemaVersion != JournalSchemaVersion) {
 		return Journal{}, errors.New("restore journal is invalid or unsupported")
+	}
+	if journal.SchemaVersion == 1 {
+		journal.SchemaVersion = JournalSchemaVersion
+		if journal.Engine == "" {
+			journal.Engine = "standard"
+		}
 	}
 	return journal, nil
 }

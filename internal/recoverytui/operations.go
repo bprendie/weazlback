@@ -24,10 +24,21 @@ func (m Model) prepare(adopt bool) tea.Cmd {
 	options := freshrestore.Options{RecoveryPath: m.kit, Destination: m.destination, Passphrase: m.passphrase, Snapshot: snapshot, Hostname: m.hostname,
 		Scope: m.scope, Repository: m.repository, AdoptLocal: adopt, MachineID: m.machineID, AdoptSourceIdentity: m.adoptIdentity,
 		TargetMachineID: m.targetMachineID, PersistTargetIdentity: m.persistTargetIdentity}
+	options.Engine = m.engine
+	options.TurboPolicy = freshrestore.TurboPolicy{MemoryPercent: 70, BreakGlass: m.turboBreakGlass, FullLink: m.turboFullLink}
 	return func() tea.Msg {
 		r, err := freshrestore.Prepare(context.Background(), options)
 		return preparedMsg{r, err}
 	}
+}
+
+func (m Model) destinationIsSSH() bool {
+	for _, destination := range m.destinations {
+		if destination.ID == m.destination {
+			return destination.Kind == "ssh"
+		}
+	}
+	return false
 }
 
 func (m Model) chooseTargetIdentity(mode string) Model {

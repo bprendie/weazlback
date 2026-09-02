@@ -61,13 +61,33 @@ func (r *Restore) placeJournaled(source, target string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
-		if err := moveOrCopy(source, target); err != nil {
+		if err := r.moveOrFallback(source, target); err != nil {
 			return err
 		}
 	} else if _, err := os.Lstat(target); err != nil {
 		return fmt.Errorf("pending restore has neither staged nor placed path: %s", target)
 	}
 	return r.recordPlaced(target)
+}
+
+func (r *Restore) moveOrFallback(source, target string) error {
+	err := os.Rename(source, target)
+	if err == nil {
+		return nil
+	}
+	if !isCrossDevice(err) {
+		return err
+	}
+	if r.Journal.Engine == EngineTurbo {
+		r.Journal.FallbackEngine = EngineStandard
+		r.Journal.FallbackPhase = "placement"
+		r.Journal.FallbackReason = "Turbo staging and target resolved to different filesystems"
+		r.Journal.Engine = EngineStandard
+		if saveErr := SaveJournal(r.JournalPath, r.Journal); saveErr != nil {
+			return saveErr
+		}
+	}
+	return copyAcrossFilesystems(source, target)
 }
 
 func moveOrCopy(source, target string) error {

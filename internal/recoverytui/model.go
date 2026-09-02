@@ -82,6 +82,7 @@ type Model struct {
 	restore                   *freshrestore.Restore
 	report                    freshrestore.Report
 	appProgress               freshrestore.RestoreProgress
+	packageProgress           freshrestore.RestoreProgress
 	filesystemProgress        freshrestore.RestoreProgress
 	browserProgress           freshrestore.RestoreProgress
 	review                    []string
@@ -97,6 +98,9 @@ type Model struct {
 	selectiveProgress         restoretxn.Progress
 	selectiveResult           restoretxn.Result
 	catalogPath               string
+	engine                    string
+	turboBreakGlass           bool
+	turboFullLink             bool
 }
 
 var (
@@ -116,7 +120,7 @@ func New() Model {
 	if len(kits) > 1 {
 		stage = "kit-choice"
 	}
-	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "home"}
+	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "home", engine: freshrestore.EngineStandard}
 }
 
 func defaultKit(kits []string) string {
@@ -258,6 +262,8 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case progressMsg:
 		if msg.progress.Phase == "applications" {
 			m.appProgress = msg.progress
+		} else if msg.progress.Phase == "package capsule" {
+			m.packageProgress = msg.progress
 		} else if msg.progress.Phase == "browser compatibility" {
 			m.browserProgress = msg.progress
 		} else {

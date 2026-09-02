@@ -59,7 +59,7 @@ func TestBackupUsesScanAndOnlyEmitsStatusProgress(t *testing.T) {
 	dir := t.TempDir()
 	argsPath := filepath.Join(dir, "args")
 	binary := filepath.Join(dir, "restic")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >\"" + argsPath + "\"\ncat >/dev/null < \"$RESTIC_PASSWORD_FILE\"\nprintf '%s\\n' '{\"message_type\":\"status\",\"percent_done\":0.5}' '{\"message_type\":\"summary\"}'\n"
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"" + argsPath + "\"\ncat >/dev/null < \"$RESTIC_PASSWORD_FILE\"\nprintf '%s\\n' '{\"message_type\":\"status\",\"percent_done\":0.5}' '{\"message_type\":\"summary\"}'\n"
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +81,25 @@ func TestBackupUsesScanAndOnlyEmitsStatusProgress(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("progress callbacks=%d, want only one status event", count)
+	}
+}
+
+func TestBackupAlwaysSweepsStaleLockAfterChildExits(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "restic")
+	marker := filepath.Join(dir, "unlock-called")
+	script := "#!/bin/sh\ncat >/dev/null < \"$RESTIC_PASSWORD_FILE\"\ncase \"$*\" in\n  *unlock*) touch \"" + marker + "\"; exit 0;;\n  *backup*) exit 7;;\nesac\n"
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runner := New(nil)
+	runner.Binary = binary
+	err := (Service{Runner: runner}).Backup(context.Background(), Repository{Location: dir, Password: []byte("x")}, "heavy", []string{dir}, nil, false)
+	if err == nil {
+		t.Fatal("failed backup was reported successful")
+	}
+	if _, statErr := os.Stat(marker); statErr != nil {
+		t.Fatal("post-backup stale-lock sweep did not run")
 	}
 }
 
@@ -181,5 +200,24 @@ func TestCheckDoesNotUnlockUnrelatedFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("unlock was attempted for a non-lock failure")
+	}
+}
+
+func TestUnlockStaleUsesSafeResticDefault(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "restic")
+	argsPath := filepath.Join(dir, "args")
+	script := "#!/bin/sh\ncat >/dev/null < \"$RESTIC_PASSWORD_FILE\"\nprintf '%s' \"$*\" > \"" + argsPath + "\"\n"
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runner := New(nil)
+	runner.Binary = binary
+	if err := (Service{Runner: runner}).UnlockStale(context.Background(), Repository{Location: dir, Password: []byte("x")}); err != nil {
+		t.Fatal(err)
+	}
+	args, _ := os.ReadFile(argsPath)
+	if !strings.HasSuffix(string(args), " unlock") || strings.Contains(string(args), "--remove-all") {
+		t.Fatalf("unsafe unlock invocation: %q", args)
 	}
 }

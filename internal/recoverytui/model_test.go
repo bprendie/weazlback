@@ -4,10 +4,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/freshrestore"
 	"github.com/bprendie/weazlback/internal/inventory"
+	"github.com/bprendie/weazlback/internal/packagecapsule"
 	"github.com/bprendie/weazlback/internal/restic"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -24,6 +26,9 @@ func TestGuidedRecoveryDefaultsToHomeScope(t *testing.T) {
 		if !strings.Contains(view, wanted) {
 			t.Fatalf("scope view missing %q: %s", wanted, view)
 		}
+	}
+	if !strings.Contains(view, "Everything — Core +") || !strings.Contains(view, "applications + Home + VMs /") {
+		t.Fatalf("Everything scope does not explicitly include applications: %s", view)
 	}
 }
 
@@ -58,12 +63,26 @@ func TestViewFitsEightyByTwentyFour(t *testing.T) {
 }
 
 func TestReviewIncludesEveryQueueAndManualItem(t *testing.T) {
-	plan := freshrestore.Plan{Official: []string{"pac"}, AUR: []string{"aur"}, SystemServices: []string{"svc"}, Applications: &inventory.ApplicationManifest{ManualReview: []string{"inspect"}}}
+	plan := freshrestore.Plan{Official: []string{"pac"}, AUR: []string{"aur"}, SystemServices: []string{"svc"}, Applications: &inventory.ApplicationManifest{ManualReview: []string{"inspect"}},
+		PackageDelta: packagecapsule.Delta{Local: []packagecapsule.Install{{Name: "capsule", Version: "2"}}}}
 	joined := strings.Join(reviewLines(plan), "\n")
-	for _, wanted := range []string{"pac", "aur", "svc", "inspect"} {
+	for _, wanted := range []string{"pac", "aur", "svc", "inspect", "capsule", "2"} {
 		if !strings.Contains(joined, wanted) {
 			t.Errorf("missing %s", wanted)
 		}
+	}
+}
+
+func TestRunningRecoveryWithFourLanesFitsEightyByTwentyFour(t *testing.T) {
+	m := New()
+	m.stage, m.started = "running", time.Now()
+	m.width, m.height = 80, 24
+	m.filesystemProgress = freshrestore.RestoreProgress{Current: "home", Completed: 50, Total: 100}
+	m.packageProgress = freshrestore.RestoreProgress{Current: "artifact", Completed: 20, Total: 40}
+	m.appProgress = freshrestore.RestoreProgress{Current: "app", Completed: 3, Total: 10}
+	view := m.View()
+	if lipgloss.Width(view) > 80 || lipgloss.Height(view) > 24 {
+		t.Fatalf("rendered %dx%d\n%s", lipgloss.Width(view), lipgloss.Height(view), view)
 	}
 }
 
@@ -77,12 +96,37 @@ func TestProgressUsesResolvedQueueDenominator(t *testing.T) {
 
 func TestFilesystemProgressShowsByteAndFileSpeed(t *testing.T) {
 	progress := freshrestore.RestoreProgress{Phase: "filesystem", Lane: "Home", Current: "extracting", Completed: 50, Total: 100,
-		BytesDone: 1 << 30, BytesTotal: 2 << 30, BytesPerSecond: 75 << 20, FilesPerSecond: 321.5}
+		BytesDone: 1 << 30, BytesTotal: 2 << 30, BytesPerSecond: 75 << 20, WireBytesPerSecond: 62 << 20, FilesPerSecond: 321.5}
 	view := laneView("FILESYSTEM / HOME", progress, false)
-	for _, wanted := range []string{"75.0 MiB/s", "321.5 files/s", "50 / 100"} {
+	for _, wanted := range []string{"output 75.0 MiB/s", "source 62.0 MiB/s", "321.5 files/s", "50 / 100"} {
 		if !strings.Contains(view, wanted) {
 			t.Fatalf("missing %q in %q", wanted, view)
 		}
+	}
+}
+
+func TestTurboIsExplicitAndSSHChoosesLinkPolicy(t *testing.T) {
+	m := New()
+	if m.engine != freshrestore.EngineStandard {
+		t.Fatalf("default engine=%q", m.engine)
+	}
+	m.stage, m.destination = "engine-choice", "remote"
+	m.destinations = []config.Destination{{ID: "remote", Kind: "ssh"}}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	m = updated.(Model)
+	if m.stage != "turbo-network" || m.engine != freshrestore.EngineTurbo {
+		t.Fatalf("stage=%q engine=%q", m.stage, m.engine)
+	}
+	if !strings.Contains(m.View(), "Full link") {
+		t.Fatal("SSH policy is not disclosed")
+	}
+}
+
+func TestTurboRequiresDistinctConfirmationPhrase(t *testing.T) {
+	m := New()
+	m.engine = freshrestore.EngineTurbo
+	if got := m.confirmationPhrase(); got != "TURBO RESTORE" {
+		t.Fatalf("phrase=%q", got)
 	}
 }
 

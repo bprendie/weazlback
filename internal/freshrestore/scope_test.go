@@ -2,6 +2,7 @@ package freshrestore
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,13 @@ func TestEverythingRetainsAllThreeRestorePoints(t *testing.T) {
 	}}
 	if r.Plan.HomeSnapshot.ID != "home" || r.Plan.HeavySnapshot.ID != "heavy" || r.Plan.Snapshot.ID != "core" {
 		t.Fatal("scope restore points were not retained")
+	}
+}
+
+func TestEverythingPlanExplicitlyIncludesParallelApplications(t *testing.T) {
+	text := PlanText(Plan{Scope: "everything"})
+	if !strings.Contains(text, "Applications (parallel) + Core + Home + Heavy") {
+		t.Fatalf("ambiguous Everything plan: %q", text)
 	}
 }
 

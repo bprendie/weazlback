@@ -103,7 +103,10 @@ func writeSupportFiles(target string) error {
 	if err := atomicBytes(filepath.Join(target, "RESTORE.txt"), []byte(Instructions), 0o644); err != nil {
 		return err
 	}
-	names := []string{"weazlback", "weazlback-restore", "RESTORE.txt"}
+	if err := atomicBytes(filepath.Join(target, "THIRD_PARTY_NOTICES.txt"), []byte(ThirdPartyNotices), 0o644); err != nil {
+		return err
+	}
+	names := []string{"weazlback", "weazlback-restore", "RESTORE.txt", "THIRD_PARTY_NOTICES.txt"}
 	if _, err := os.Stat(filepath.Join(target, "restic")); err == nil {
 		names = append(names, "restic")
 	}

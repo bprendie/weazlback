@@ -104,6 +104,9 @@ func reconcileApplicationLanes(ctx context.Context, plan Plan, progress func(Res
 	if system && len(plan.Official) > 0 {
 		run("official packages", plan.Official, func(items []string) error {
 			args := append([]string{"-n", "pacman", "-S", "--needed", "--noconfirm", "--"}, items...)
+			if progress != nil {
+				return runPacmanProgress(ctx, "sudo", args, "applications", "official packages", items, progress)
+			}
 			return invoke("sudo", args...)
 		})
 	}
@@ -121,6 +124,9 @@ func reconcileApplicationLanes(ctx context.Context, plan Plan, progress func(Res
 				args := []string{"-n", "pacman", "-U", "--needed", "--noconfirm", "--"}
 				for _, name := range items {
 					args = append(args, plan.ArtifactFiles[name])
+				}
+				if progress != nil {
+					return runPacmanProgress(ctx, "sudo", args, "applications", "cached AUR artifacts", items, progress)
 				}
 				return invoke("sudo", args...)
 			})
@@ -268,10 +274,27 @@ func PlanText(plan Plan) string {
 	if plan.HeavySnapshot != nil {
 		points += fmt.Sprintf("\nHeavy          %s  %s", plan.HeavySnapshot.ShortID, plan.HeavySnapshot.Time.Local().Format("2006-01-02 15:04"))
 	}
+	if plan.PackageSnapshot != nil {
+		points += fmt.Sprintf("\nPackages       %s  %s", plan.PackageSnapshot.ShortID, plan.PackageSnapshot.Time.Local().Format("2006-01-02 15:04"))
+	}
 	identity := "preserve target identity"
 	if plan.AdoptSourceIdentity {
 		identity = "ADOPT source identity " + plan.SourceMachineID
 	}
-	return fmt.Sprintf("Recovery scope %s\n%s\nHostname       %s\nMachine        %s\nHome mapping   %s -> %s\nOwnership      %d:%d -> %d:%d\nPackages       %d official / %d AUR / %d Flatpak\nServices       %d system / %d user",
-		plan.Scope, points, plan.Hostname, identity, plan.OriginalHome, plan.TargetHome, plan.SourceUID, plan.SourceGID, plan.TargetUID, plan.TargetGID, len(plan.Official), len(plan.AUR), len(plan.Flatpak), len(plan.SystemServices), len(plan.UserServices))
+	return fmt.Sprintf("Recovery scope %s\nIncludes       %s\n%s\nHostname       %s\nMachine        %s\nHome mapping   %s -> %s\nOwnership      %d:%d -> %d:%d\nPackage delta  %d local / %d official online / %d foreign online / %d kept\nFlatpaks       %d\nServices       %d system / %d user",
+		plan.Scope, recoveryScopeContents(plan.Scope), points, plan.Hostname, identity, plan.OriginalHome, plan.TargetHome, plan.SourceUID, plan.SourceGID, plan.TargetUID, plan.TargetGID,
+		len(plan.PackageDelta.Local), len(plan.Official), len(plan.AUR), len(plan.PackageDelta.Kept), len(plan.Flatpak), len(plan.SystemServices), len(plan.UserServices))
+}
+
+func recoveryScopeContents(scope string) string {
+	switch scope {
+	case "everything":
+		return "Applications (parallel) + Core + Home + Heavy"
+	case "home":
+		return "Applications (parallel) + Core + Home"
+	case "applications":
+		return "Applications only"
+	default:
+		return "Applications (parallel) + Core"
+	}
 }

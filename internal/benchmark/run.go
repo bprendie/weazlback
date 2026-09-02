@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -26,6 +27,9 @@ func Run(ctx context.Context, options Options, progress func(string)) (Report, e
 	if options.WorkDir == "" {
 		options.WorkDir = ".weazlback-bench"
 	}
+	if options.Trials < 1 {
+		options.Trials = 1
+	}
 	if err := os.MkdirAll(options.WorkDir, 0o700); err != nil {
 		return Report{}, err
 	}
@@ -35,7 +39,7 @@ func Run(ctx context.Context, options Options, progress func(string)) (Report, e
 	}
 	defer os.RemoveAll(runRoot)
 	report := Report{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		Engine:        selected.name(),
 		EngineVersion: version,
 		StartedAt:     time.Now().UTC(),
@@ -71,6 +75,9 @@ func runFixture(ctx context.Context, selected engine, options Options, runRoot, 
 	}
 	logical, allocated := treeBytes(source)
 	result := Result{Fixture: fixture, LogicalBytes: logical, AllocatedBytes: allocated}
+	if proofs, proofErr := proveTree(source); proofErr == nil {
+		result.FileCount = int64(len(proofs))
+	}
 	if err := selected.init(ctx, repo); err != nil {
 		return result, err
 	}
@@ -113,10 +120,19 @@ func runFixture(ctx context.Context, selected engine, options Options, runRoot, 
 	} else {
 		result.ChangedRepoGrowth = -1
 	}
-	progress("restoring " + fixture)
-	result.RestoreDuration, err = duration(func() error { return selected.restore(ctx, repo, restore) })
-	if err != nil {
-		return result, err
+	for trial := 0; trial < options.Trials; trial++ {
+		_ = os.RemoveAll(restore)
+		progress(fmt.Sprintf("restoring %s (trial %d/%d)", fixture, trial+1, options.Trials))
+		d, restoreErr := duration(func() error { return selected.restore(ctx, repo, restore) })
+		if restoreErr != nil {
+			return result, restoreErr
+		}
+		result.RestoreTrials = append(result.RestoreTrials, d)
+	}
+	result.ColdRestore = result.RestoreTrials[0]
+	result.RestoreDuration = medianDuration(result.RestoreTrials)
+	if len(result.RestoreTrials) > 1 {
+		result.WarmRestoreMedian = medianDuration(result.RestoreTrials[1:])
 	}
 	result.RestoredBytes, result.RestoredAllocated = treeBytes(restore)
 	restoredSource := filepath.Join(restore, source)
@@ -125,6 +141,16 @@ func runFixture(ctx context.Context, selected engine, options Options, runRoot, 
 	}
 	result.RestoreVerified = true
 	return result, nil
+}
+
+func medianDuration(values []time.Duration) time.Duration {
+	copyValues := append([]time.Duration(nil), values...)
+	sort.Slice(copyValues, func(i, j int) bool { return copyValues[i] < copyValues[j] })
+	middle := len(copyValues) / 2
+	if len(copyValues)%2 == 1 {
+		return copyValues[middle]
+	}
+	return (copyValues[middle-1] + copyValues[middle]) / 2
 }
 
 func duration(fn func() error) (time.Duration, error) {
@@ -145,7 +171,7 @@ func selectedFixtures(name string) ([]string, error) {
 			return []string{name}, nil
 		}
 	}
-	return nil, fmt.Errorf("fixture must be all, tiny, mixed, raw, or qcow2")
+	return nil, fmt.Errorf("fixture must be all, tiny, mixed, raw, qcow2, or metadata")
 }
 
 func Write(path string, report Report) error {

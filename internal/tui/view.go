@@ -21,12 +21,7 @@ func (m Model) header(width int) string {
 }
 
 func renderLogo(width int) string {
-	lines := strings.Split(logo, "\n")
-	colors := []lipgloss.Color{accent, secondary, success, warning}
-	for i := range lines {
-		lines[i] = lipgloss.NewStyle().Foreground(colors[i%len(colors)]).Render(lines[i])
-	}
-	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
+	return renderGradientLogo(logo, width)
 }
 
 func (m Model) content(width, height int) string {

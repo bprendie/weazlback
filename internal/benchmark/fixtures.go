@@ -9,9 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"golang.org/x/sys/unix"
 )
 
-var fixtureNames = []string{"tiny", "mixed", "raw", "qcow2"}
+var fixtureNames = []string{"tiny", "mixed", "raw", "qcow2", "metadata"}
 
 func createFixture(name, root string) error {
 	if err := os.MkdirAll(root, 0o700); err != nil {
@@ -26,9 +29,45 @@ func createFixture(name, root string) error {
 		return createRaw(root)
 	case "qcow2":
 		return createQCOW2(root)
+	case "metadata":
+		return createMetadata(root)
 	default:
 		return fmt.Errorf("unknown fixture %q", name)
 	}
+}
+
+func createMetadata(root string) error {
+	dir := filepath.Join(root, "métadata tree", strings.Repeat("long-", 20))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
+	regular := filepath.Join(dir, "秘密 file")
+	if err := os.WriteFile(regular, []byte("metadata fidelity\n"), 0o640); err != nil {
+		return err
+	}
+	_ = unix.Setxattr(regular, "user.weazlback", []byte("metadata-fixture"), 0)
+	if err := os.Link(regular, filepath.Join(dir, "hardlink")); err != nil {
+		return err
+	}
+	if err := os.Symlink("秘密 file", filepath.Join(dir, "symlink")); err != nil {
+		return err
+	}
+	stamp := time.Unix(1_700_000_000, 123_000_000)
+	if err := os.Chtimes(regular, stamp, stamp); err != nil {
+		return err
+	}
+	sparse := filepath.Join(root, "sparse-metadata")
+	file, err := os.OpenFile(sparse, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if err = file.Truncate(1 << 30); err == nil {
+		_, err = file.WriteAt([]byte("tail"), (1<<30)-4)
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func createTiny(root string) error {
@@ -115,6 +154,8 @@ func mutateFixture(name, root string) error {
 		}
 		defer os.Remove(randomPath)
 		return qemuWriteFromFile(filepath.Join(root, "disk.qcow2"), randomPath)
+	case "metadata":
+		return os.Chmod(filepath.Join(root, "métadata tree", strings.Repeat("long-", 20), "秘密 file"), 0o600)
 	default:
 		return fmt.Errorf("unknown fixture %q", name)
 	}

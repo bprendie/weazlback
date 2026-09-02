@@ -32,3 +32,4 @@ known_hosts
 *.prof
 coverage.out
 .DS_Store
+/screenshot-*.png

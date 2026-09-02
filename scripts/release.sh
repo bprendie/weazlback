@@ -12,6 +12,7 @@ CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags='-s -w' -o "$STAGE/wea
 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags='-s -w' -o "$STAGE/weazlback-$VERSION/weazlback-restore" "$REPO_ROOT/cmd/weazlback-restore"
 install -m0644 "$REPO_ROOT/README.md" "$STAGE/weazlback-$VERSION/README.md"
 install -m0644 "$REPO_ROOT/LICENSE" "$STAGE/weazlback-$VERSION/LICENSE"
+install -m0644 "$REPO_ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/weazlback-$VERSION/THIRD_PARTY_NOTICES.md"
 install -m0644 "$REPO_ROOT/manifest.json" "$STAGE/weazlback-$VERSION/manifest.json"
 install -D -m0755 "$REPO_ROOT/scripts/install.sh" "$STAGE/weazlback-$VERSION/scripts/install.sh"
 install -D -m0755 "$REPO_ROOT/scripts/uninstall.sh" "$STAGE/weazlback-$VERSION/scripts/uninstall.sh"

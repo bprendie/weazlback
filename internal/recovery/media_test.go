@@ -37,7 +37,7 @@ func TestPrepareMediaPreservesUnrelatedFiles(t *testing.T) {
 	if err != nil || !strings.Contains(string(checksums), "weazlback-recovery.wzrk") {
 		t.Fatalf("checksums=%q err=%v", checksums, err)
 	}
-	for _, name := range []string{"weazlback", "weazlback-restore", "weazlback-recovery.wzrk", "RESTORE.txt"} {
+	for _, name := range []string{"weazlback", "weazlback-restore", "weazlback-recovery.wzrk", "RESTORE.txt", "THIRD_PARTY_NOTICES.txt"} {
 		if _, err := os.Stat(filepath.Join(target, name)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}

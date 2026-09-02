@@ -14,8 +14,8 @@ func Load(root string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	var manifest Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
+	manifest, err := Parse(data)
+	if err != nil {
 		return Manifest{}, err
 	}
 	if err := Validate(root, manifest); err != nil {
@@ -24,18 +24,38 @@ func Load(root string) (Manifest, error) {
 	return manifest, nil
 }
 
-func Validate(root string, manifest Manifest) error {
+func Parse(data []byte) (Manifest, error) {
+	var manifest Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return Manifest{}, err
+	}
+	if err := ValidateLedger(manifest); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
+}
+
+func ValidateLedger(manifest Manifest) error {
 	if manifest.SchemaVersion != SchemaVersion || manifest.CapturedAt.IsZero() || manifest.Hostname == "" {
 		return errors.New("package capsule identity is incomplete or unsupported")
 	}
 	if len(manifest.Packages) == 0 || manifest.Summary.Installed != len(manifest.Packages) {
 		return errors.New("package capsule inventory is incomplete")
 	}
-	captured := 0
 	for _, pkg := range manifest.Packages {
 		if pkg.Name == "" || pkg.Installed == "" || (pkg.Source != "official" && pkg.Source != "foreign") {
 			return fmt.Errorf("invalid package ledger entry %q", pkg.Name)
 		}
+	}
+	return nil
+}
+
+func Validate(root string, manifest Manifest) error {
+	if err := ValidateLedger(manifest); err != nil {
+		return err
+	}
+	captured := 0
+	for _, pkg := range manifest.Packages {
 		if pkg.Artifact == "" {
 			continue
 		}
@@ -69,6 +89,40 @@ func Validate(root string, manifest Manifest) error {
 		return errors.New("package capsule summary does not match artifact ledger")
 	}
 	return nil
+}
+
+func VerifyArtifacts(root string, manifest Manifest, run Runner) (map[string]string, error) {
+	if run == nil {
+		run = ExecRunner{Quiet: true}
+	}
+	if err := Validate(root, manifest); err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, manifest.Summary.Captured)
+	for _, pkg := range manifest.Packages {
+		if pkg.Artifact == "" {
+			continue
+		}
+		path, _ := capsulePath(root, pkg.Artifact)
+		meta, buildInfo, err := inspectArtifact(run, path)
+		if err != nil {
+			return nil, fmt.Errorf("inspect restored artifact for %s: %w", pkg.Name, err)
+		}
+		if meta.Name != pkg.Name || meta.Version != pkg.ArtifactVersion || meta.Architecture != pkg.Architecture {
+			return nil, fmt.Errorf("restored artifact identity mismatch for %s", pkg.Name)
+		}
+		if ok, reason := compatible(meta, buildInfo); !ok {
+			return nil, fmt.Errorf("restored artifact incompatible for %s: %s", pkg.Name, reason)
+		}
+		if pkg.Signature != "" {
+			signature, _ := capsulePath(root, pkg.Signature)
+			if err := run.Run("pacman-key", "--verify", signature, path); err != nil {
+				return nil, fmt.Errorf("restored artifact signature invalid for %s: %w", pkg.Name, err)
+			}
+		}
+		result[pkg.Name] = path
+	}
+	return result, nil
 }
 
 func capsulePath(root, relative string) (string, error) {

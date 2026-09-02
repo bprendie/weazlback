@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRawFixtureIsSparseAndMutable(t *testing.T) {
@@ -20,6 +21,15 @@ func TestRawFixtureIsSparseAndMutable(t *testing.T) {
 	}
 	if err := mutateFixture("raw", root); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMedianDuration(t *testing.T) {
+	if got := medianDuration([]time.Duration{9, 1, 5}); got != 5 {
+		t.Fatalf("odd median = %v", got)
+	}
+	if got := medianDuration([]time.Duration{8, 2, 6, 4}); got != 5 {
+		t.Fatalf("even median = %v", got)
 	}
 }
 

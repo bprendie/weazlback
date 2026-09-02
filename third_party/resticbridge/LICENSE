@@ -1,0 +1,6 @@
+BSD 2-Clause License
+
+This bridge is part of Weazlback. It calls the pinned restic v0.19.1 internal
+repository and restorer packages. Restic is Copyright (c) 2014 Alexander Neumann
+and contributors and distributed under the BSD 2-Clause License. The complete
+upstream license is available at https://github.com/restic/restic/blob/v0.19.1/LICENSE.

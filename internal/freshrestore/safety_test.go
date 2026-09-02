@@ -76,6 +76,32 @@ func TestMoveOrCopyAcrossRealFilesystems(t *testing.T) {
 	}
 }
 
+func TestTurboCrossDevicePlacementRecordsStandardFallback(t *testing.T) {
+	sourceRoot := t.TempDir()
+	targetRoot, err := os.MkdirTemp(".", ".turbo-cross-device-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(targetRoot) })
+	var sourceStat, targetStat syscall.Stat_t
+	_ = syscall.Stat(sourceRoot, &sourceStat)
+	_ = syscall.Stat(targetRoot, &targetStat)
+	if sourceStat.Dev == targetStat.Dev {
+		t.Skip("test host has one filesystem")
+	}
+	source, target := filepath.Join(sourceRoot, "file"), filepath.Join(targetRoot, "file")
+	if err := os.WriteFile(source, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := Restore{JournalPath: filepath.Join(sourceRoot, "journal.json"), Journal: Journal{Engine: EngineTurbo}}
+	if err := r.moveOrFallback(source, target); err != nil {
+		t.Fatal(err)
+	}
+	if r.Journal.Engine != EngineStandard || r.Journal.FallbackPhase != "placement" {
+		t.Fatalf("journal=%+v", r.Journal)
+	}
+}
+
 func TestCompleteJournalWithoutCorePathsRewindsToReusableStage(t *testing.T) {
 	dir := t.TempDir()
 	original := filepath.Join(dir, "source", ".config")
@@ -108,6 +134,20 @@ func TestJournalRoundTripIsPrivate(t *testing.T) {
 	info, _ := os.Stat(path)
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("journal mode=%o", info.Mode().Perm())
+	}
+}
+
+func TestSchemaOneJournalMigratesToStandardEngine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":1,"repository_id":"r","snapshot_id":"s","stage":"core_staged"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := LoadJournal(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if journal.SchemaVersion != 2 || journal.Engine != EngineStandard {
+		t.Fatalf("journal=%+v", journal)
 	}
 }
 

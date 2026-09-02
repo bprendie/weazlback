@@ -115,14 +115,20 @@ func (s Service) BackupMachineWithProgress(ctx context.Context, repo Repository,
 			}
 		}, args...)
 	}
-	err := stream()
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "repository is already locked") {
-		if _, unlockErr := s.Runner.Run(ctx, repo, "unlock"); unlockErr != nil {
-			return err
+	backupErr := stream()
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cleanupErr := s.UnlockStale(cleanupCtx, repo)
+	cancel()
+	if backupErr != nil {
+		if cleanupErr != nil {
+			return fmt.Errorf("%w; post-backup stale-lock cleanup failed: %v", backupErr, cleanupErr)
 		}
-		return stream()
+		return backupErr
 	}
-	return err
+	if cleanupErr != nil {
+		return fmt.Errorf("backup completed but stale-lock cleanup failed: %w", cleanupErr)
+	}
+	return nil
 }
 
 func (s Service) Snapshots(ctx context.Context, repo Repository) ([]Snapshot, error) {
@@ -196,15 +202,13 @@ func (s Service) Check(ctx context.Context, repo Repository, readData bool) erro
 		args = append(args, "--read-data")
 	}
 	_, err := s.Runner.Run(ctx, repo, args...)
-	if !repositoryLocked(err) {
-		return err
-	}
-	// Restic unlock removes only stale locks by default. It refuses locks whose
-	// owner is still considered active, so this never bypasses live work.
-	if _, unlockErr := s.Runner.Run(ctx, repo, "unlock"); unlockErr != nil {
-		return err
-	}
-	_, err = s.Runner.Run(ctx, repo, args...)
+	return err
+}
+
+// UnlockStale asks Restic to remove only locks whose owning process is no longer
+// active. Restic's default unlock deliberately preserves a live repository lock.
+func (s Service) UnlockStale(ctx context.Context, repo Repository) error {
+	_, err := s.Runner.Run(ctx, repo, "unlock")
 	return err
 }
 

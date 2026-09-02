@@ -33,6 +33,12 @@ func New(stderr io.Writer) Runner { return Runner{Binary: "restic", Stderr: stde
 func (r Runner) Run(ctx context.Context, repo Repository, args ...string) ([]byte, error) {
 	var stdout bytes.Buffer
 	err := r.run(ctx, repo, &stdout, nil, args...)
+	if r.shouldRecoverStaleLock(args, err) {
+		if unlockErr := r.run(ctx, repo, io.Discard, nil, "unlock"); unlockErr == nil {
+			stdout.Reset()
+			err = r.run(ctx, repo, &stdout, nil, args...)
+		}
+	}
 	return stdout.Bytes(), err
 }
 
@@ -43,7 +49,17 @@ func (r Runner) RunWithNewPassword(ctx context.Context, repo Repository, newPass
 }
 
 func (r Runner) Stream(ctx context.Context, repo Repository, event func([]byte), args ...string) error {
-	return r.run(ctx, repo, &lineWriter{event: event}, nil, args...)
+	err := r.run(ctx, repo, &lineWriter{event: event}, nil, args...)
+	if r.shouldRecoverStaleLock(args, err) {
+		if unlockErr := r.run(ctx, repo, io.Discard, nil, "unlock"); unlockErr == nil {
+			err = r.run(ctx, repo, &lineWriter{event: event}, nil, args...)
+		}
+	}
+	return err
+}
+
+func (Runner) shouldRecoverStaleLock(args []string, err error) bool {
+	return len(args) > 0 && args[0] != "unlock" && repositoryLocked(err)
 }
 
 func (r Runner) run(ctx context.Context, repo Repository, stdout io.Writer, newPassword []byte, args ...string) error {
