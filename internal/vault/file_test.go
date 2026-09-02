@@ -2,11 +2,14 @@ package vault
 
 import (
 	"bytes"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+const v050CompatibilityPassphrase = "weazlback-v050-compatibility"
 
 func TestCreateUnlockAndPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "private", "test.vault")
@@ -62,5 +65,28 @@ func TestCiphertextDoesNotContainSecret(t *testing.T) {
 	}
 	if bytes.Contains(b, []byte("PRIVATE-KEY-MARKER")) || bytes.Contains(b, []byte("pass")) {
 		t.Fatal("vault leaked plaintext")
+	}
+}
+
+func TestV050Argon2CompatibilityVector(t *testing.T) {
+	salt := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+	want, err := hex.DecodeString("37996bf7841a5b14043080b2f05b48a9d724bc387283160ffb7eb2272829a75c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := derive([]byte(v050CompatibilityPassphrase), salt); !bytes.Equal(got, want) {
+		t.Fatalf("Argon2id output changed: got %x", got)
+	}
+}
+
+func TestUnlocksV050Vault(t *testing.T) {
+	v := New(filepath.Join("testdata", "v050.vault"))
+	if err := v.Unlock([]byte(v050CompatibilityPassphrase)); err != nil {
+		t.Fatalf("unlock pre-upgrade vault: %v", err)
+	}
+	defer v.Lock()
+	value, err := v.Get("fixture/value")
+	if err != nil || string(value) != "synthetic-v050-secret" {
+		t.Fatalf("fixture value=%q err=%v", value, err)
 	}
 }

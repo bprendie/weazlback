@@ -42,3 +42,17 @@ func TestExportAndVerify(t *testing.T) {
 		t.Fatalf("mode=%v err=%v", info.Mode().Perm(), err)
 	}
 }
+
+func TestOpensV050RecoveryKit(t *testing.T) {
+	bundle, err := Open(filepath.Join("testdata", "v050.wzrk"), []byte("weazlback-v050-compatibility"))
+	if err != nil {
+		t.Fatalf("open pre-upgrade recovery kit: %v", err)
+	}
+	defer bundle.Close()
+	if bundle.Manifest.SchemaVersion != SchemaVersion || string(bundle.Config) != "{\"schema_version\":1}\n" {
+		t.Fatalf("unexpected pre-upgrade bundle: schema=%d config=%q", bundle.Manifest.SchemaVersion, bundle.Config)
+	}
+	if string(bundle.KnownHosts) != "backup.example.test ssh-ed25519 AAAAsynthetic\n" {
+		t.Fatalf("unexpected known-host fixture: %q", bundle.KnownHosts)
+	}
+}

@@ -13,6 +13,7 @@ planning/
 
 # Never publish live vaults, recovery media, credentials, or local overrides
 *.wzrk
+!internal/recovery/testdata/*.wzrk
 *.pem
 *.key
 .env

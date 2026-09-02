@@ -20,7 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const Version = "1.0.0-rc5"
+const Version = "1.0.0-rc6"
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
