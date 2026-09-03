@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/bprendie/weazlback/internal/catalog"
+	"github.com/bprendie/weazlback/internal/freshrestore"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/restoretxn"
 	"github.com/charmbracelet/lipgloss"
@@ -44,12 +45,13 @@ func (m Model) restoreScreen() string {
 		return body + m.restoreTransactionResultView()
 	case "bundle-components":
 		return body + m.styles.header.Render("POINT-IN-TIME BUNDLES") + "\n\n" + m.bundleSummary() + "\n\n" +
-			"1 " + bundleChoiceLabel(m.restoreBundleChoices, restoretxn.SystemConfig) + " System Config — dotfiles, widgets, Weazl settings\n" +
-			"2 " + bundleChoiceLabel(m.restoreBundleChoices, restoretxn.PersonalFiles) + " Personal Files — normal Home data\n" +
-			"3 " + bundleChoiceLabel(m.restoreBundleChoices, restoretxn.HeavyData) + " VMs / Containers — Heavy lane\n" +
-			"4 [ ] Everything above — Applications remain separate\n\n" + m.styles.help.Render("1/2/3 toggle • 4 all • [/] time • enter continue • esc dashboard")
+			"c " + bundleChoiceLabel(m.restoreBundleChoices, restoretxn.SystemConfig) + " Core — System personality\n" +
+			"h " + combinedBundleChoiceLabel(m.restoreBundleChoices, false) + " Core + Home — Personality and personal data\n" +
+			"e " + combinedBundleChoiceLabel(m.restoreBundleChoices, true) + " Everything — Full configured recovery\n\n" + m.styles.help.Render("c/h/e preset • [/] time • enter continue • esc dashboard")
 	case "bundle-mode":
 		return body + m.styles.header.Render("BUNDLE RESTORE MODE") + "\n\n[o / enter] Safe Overlay\n    Replace conflicts after preserving rollback copies; never delete unrelated files.\n\n[x] Exact Rewind\n    Restore selected boundaries exactly and remove paths proven absent at that point."
+	case "bundle-compatibility-warning":
+		return body + m.styles.header.Render("CROSS-PLATFORM RESTORE") + "\n\n" + freshrestore.PlatformMismatchWarning + "\n\n" + m.styles.help.Render("enter continue • esc cancel")
 	case "bundle-safety":
 		return body + m.styles.header.Render("EXACT REWIND / SAFETY BACKUP") + "\n\n" +
 			m.styles.status.Render("This is destructive and could result in missing or corrupt files.") +

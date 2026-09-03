@@ -120,7 +120,7 @@ func New() Model {
 	if len(kits) > 1 {
 		stage = "kit-choice"
 	}
-	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "home", engine: freshrestore.EngineStandard}
+	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "core-home", engine: freshrestore.EngineStandard}
 }
 
 func defaultKit(kits []string) string {
@@ -180,6 +180,9 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.restore, m.stage, m.err = msg.restore, "plan", ""
+		if msg.restore.Plan.ScopeDecision.PlatformMismatch {
+			m.stage = "compatibility-warning"
+		}
 		m.review = reviewLines(msg.restore.Plan)
 	case destinationsMsg:
 		if msg.err != nil {

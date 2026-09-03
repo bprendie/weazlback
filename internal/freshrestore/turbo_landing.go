@@ -67,6 +67,10 @@ func (r *Restore) restoreSelectionTurbo(ctx context.Context, target string, incl
 			return err
 		}
 	}
+	if !r.Plan.includesCore() {
+		_, err := removeWithheldCore(target, r.Plan.OriginalHome, r.Plan.ScopeDecision.WithheldClaims)
+		return err
+	}
 	if includeHeavy && r.Plan.HeavySnapshot != nil {
 		if err := r.restoreEmbeddedPoint(ctx, "Heavy", r.Plan.HeavySnapshot.ID, target); err != nil {
 			return err

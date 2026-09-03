@@ -12,7 +12,9 @@ import (
 	"github.com/bprendie/weazlback/internal/browserrepair"
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
+	"github.com/bprendie/weazlback/internal/freshrestore"
 	"github.com/bprendie/weazlback/internal/heavy"
+	"github.com/bprendie/weazlback/internal/platform"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/restoretxn"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +24,7 @@ type bundleSafetyMsg struct{ err error }
 type bundlePreparedMsg struct {
 	components []restoretxn.Component
 	basket     map[string]restoreBasketItem
+	decision   freshrestore.ScopeDecision
 	err        error
 }
 
@@ -55,9 +58,23 @@ func (m Model) prepareBundleTransaction() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.busy, m.status = true, "resolving independent bundle boundaries"
-	cfg := m.cfg
+	cfg, choices := m.cfg, m.restoreBundleChoices
 	return m, func() tea.Msg {
 		service := restic.NewService(io.Discard)
+		manifest, manifestErr := loadBundleManifest(context.Background(), service, repo, components)
+		if manifestErr != nil {
+			return bundlePreparedMsg{err: manifestErr}
+		}
+		decision := freshrestore.PlanScope(bundleScope(choices), manifest.Platform, platform.Current(), manifest.CoreClaims)
+		if decision.PlatformMismatch {
+			filtered := components[:0]
+			for _, component := range components {
+				if component.Bundle != restoretxn.SystemConfig {
+					filtered = append(filtered, component)
+				}
+			}
+			components = filtered
+		}
 		basket := map[string]restoreBasketItem{}
 		for _, component := range components {
 			paths := bundlePaths(cfg, component, nil)
@@ -66,14 +83,18 @@ func (m Model) prepareBundleTransaction() (tea.Model, tea.Cmd) {
 				if loadErr != nil {
 					return bundlePreparedMsg{err: loadErr}
 				}
-				paths = bundlePaths(cfg, component, files)
+				if decision.PlatformMismatch {
+					paths = personalBundlePathsClaims(files, manifest.CoreClaims)
+				} else {
+					paths = bundlePaths(cfg, component, files)
+				}
 			}
 			for _, path := range paths {
 				basket[path] = restoreBasketItem{Path: path, Snapshot: component.Snapshot.ID, MachineID: component.MachineID,
 					Profile: component.Profile, Time: component.Snapshot.Time}
 			}
 		}
-		return bundlePreparedMsg{components: components, basket: basket}
+		return bundlePreparedMsg{components: components, basket: basket, decision: decision}
 	}
 }
 
@@ -107,18 +128,7 @@ func bundlePaths(cfg config.Config, component restoretxn.Component, files []rest
 }
 
 func personalBundlePaths(files []restic.FileEntry, cfg config.Config) []string {
-	home := ""
-	if len(files) > 0 {
-		for _, path := range files {
-			if strings.HasPrefix(path.Path, "/home/") {
-				parts := strings.Split(strings.TrimPrefix(path.Path, "/"), "/")
-				if len(parts) >= 2 {
-					home = "/" + filepath.Join(parts[0], parts[1])
-					break
-				}
-			}
-		}
-	}
+	home := sourceHome(files)
 	if home == "" {
 		return nil
 	}
@@ -132,6 +142,10 @@ func personalBundlePaths(files []restic.FileEntry, cfg config.Config) []string {
 			}
 		}
 	}
+	return personalBundlePathsExcluding(files, home, core)
+}
+
+func personalBundlePathsExcluding(files []restic.FileEntry, home string, core []string) []string {
 	children := map[string]map[string]bool{}
 	for _, entry := range files {
 		path := filepath.Clean(entry.Path)
@@ -200,23 +214,13 @@ func (m Model) previousBundleTime(direction int) Model {
 	return m
 }
 
-func bundleChoiceLabel(choices map[restoretxn.Bundle]bool, bundle restoretxn.Bundle) string {
-	if choices[bundle] {
-		return "[✓]"
-	}
-	return "[ ]"
-}
-
 func (m Model) updateBundleComponentsKey(key string) (tea.Model, tea.Cmd) {
-	toggle := func(bundle restoretxn.Bundle) { m.restoreBundleChoices[bundle] = !m.restoreBundleChoices[bundle] }
 	switch key {
-	case "1":
-		toggle(restoretxn.SystemConfig)
-	case "2":
-		toggle(restoretxn.PersonalFiles)
-	case "3":
-		toggle(restoretxn.HeavyData)
-	case "4":
+	case "c":
+		m.restoreBundleChoices = map[restoretxn.Bundle]bool{restoretxn.SystemConfig: true}
+	case "h":
+		m.restoreBundleChoices = map[restoretxn.Bundle]bool{restoretxn.SystemConfig: true, restoretxn.PersonalFiles: true}
+	case "e":
 		m.restoreBundleChoices = map[restoretxn.Bundle]bool{restoretxn.SystemConfig: true, restoretxn.PersonalFiles: true, restoretxn.HeavyData: true}
 	case "[":
 		m = m.previousBundleTime(1)

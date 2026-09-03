@@ -29,6 +29,9 @@ func Parse(data []byte) (Manifest, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return Manifest{}, err
 	}
+	if manifest.PackageFamily == "" {
+		manifest.PackageFamily = "pacman"
+	}
 	if err := ValidateLedger(manifest); err != nil {
 		return Manifest{}, err
 	}

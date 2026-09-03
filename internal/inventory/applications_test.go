@@ -25,3 +25,15 @@ func TestApplicationManifestIsPrivateAndVersioned(t *testing.T) {
 		t.Fatal("manifest did not round trip")
 	}
 }
+
+func TestLegacyApplicationManifestRemainsReadableAsOmarchy(t *testing.T) {
+	legacy := ApplicationManifest{SchemaVersion: 1, CapturedAt: time.Now(), Hostname: "gold-master", Omarchy: "quattro",
+		Packages: PackageInventory{OfficialInstalled: []InstalledPackage{{Name: "restic", Version: "1"}}}}
+	if err := ValidateApplications(legacy); err != nil {
+		t.Fatal(err)
+	}
+	normalized := NormalizeApplications(legacy, "/home/bobp")
+	if normalized.Platform.Family != "arch" || normalized.Platform.Desktop != "omarchy-shell" || len(normalized.CoreClaims) == 0 {
+		t.Fatalf("normalized=%+v", normalized)
+	}
+}

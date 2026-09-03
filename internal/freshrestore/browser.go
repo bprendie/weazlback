@@ -38,7 +38,10 @@ func (r *Restore) repairBrowserCompatibility() (browserrepair.Result, []string) 
 }
 
 func (r *Restore) browserRepairEligible() bool {
-	eligibleScope := r.Plan.Scope == "core" || r.Plan.Scope == "home" || r.Plan.Scope == "everything"
+	if !r.Plan.includesCore() && !r.Plan.includesHome() {
+		return false
+	}
+	eligibleScope := r.Plan.Scope == "core" || r.Plan.Scope == "home" || r.Plan.Scope == "core-home" || r.Plan.Scope == "everything"
 	return eligibleScope && r.Plan.SourceHostname != "" && r.Plan.SourceHostname != r.Plan.Hostname
 }
 

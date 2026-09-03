@@ -11,6 +11,9 @@ import (
 )
 
 func (r *Restore) commitCore() ([]string, error) {
+	if !r.Plan.includesCore() {
+		return nil, nil
+	}
 	var restored []string
 	for _, profile := range r.Session.Config.Profiles {
 		if profile.Name != "core" {

@@ -1,6 +1,10 @@
 package contracts
 
-import "time"
+import (
+	"time"
+
+	"github.com/bprendie/weazlback/internal/platform"
+)
 
 type Destination struct {
 	ID            string `json:"id"`
@@ -70,10 +74,12 @@ type Status struct {
 }
 
 type MachineManifest struct {
-	SchemaVersion int      `json:"schema_version"`
-	MachineID     string   `json:"machine_id"`
-	Hostname      string   `json:"hostname"`
-	Architecture  string   `json:"architecture"`
-	Omarchy       string   `json:"omarchy_version"`
-	Profiles      []string `json:"profiles"`
+	SchemaVersion int               `json:"schema_version"`
+	MachineID     string            `json:"machine_id"`
+	Hostname      string            `json:"hostname"`
+	Architecture  string            `json:"architecture"`
+	Omarchy       string            `json:"omarchy_version"`
+	Profiles      []string          `json:"profiles"`
+	Platform      platform.Identity `json:"platform,omitempty"`
+	CoreClaims    []platform.Claim  `json:"core_claims,omitempty"`
 }

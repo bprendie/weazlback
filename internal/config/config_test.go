@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,6 +24,52 @@ func TestLoadMigratesAndPersistsStableMachineIdentity(t *testing.T) {
 	second, err := Load(path)
 	if err != nil || second.Machine.ID != first.Machine.ID {
 		t.Fatalf("identity changed: first=%q second=%q err=%v", first.Machine.ID, second.Machine.ID, err)
+	}
+}
+
+func TestHomeProfilePreservesHiddenContent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfg := Default()
+	for _, profile := range cfg.Profiles {
+		if profile.Name != "home" {
+			continue
+		}
+		for _, exclude := range profile.Excludes {
+			if strings.Contains(exclude, ".cache") {
+				t.Fatalf("blanket hidden cache exclusion retained: %s", exclude)
+			}
+		}
+		return
+	}
+	t.Fatal("home profile missing")
+}
+
+func TestLoadRemovesLegacyBlanketHomeCacheExclusion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(t.TempDir(), "config.json")
+	cfg := Default()
+	for i := range cfg.Profiles {
+		if cfg.Profiles[i].Name == "home" {
+			cfg.Profiles[i].Excludes = append(cfg.Profiles[i].Excludes, filepath.Join(home, ".cache", "**"))
+		}
+	}
+	if err := Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range loaded.Profiles {
+		if profile.Name == "home" {
+			for _, exclude := range profile.Excludes {
+				if exclude == filepath.Join(home, ".cache", "**") {
+					t.Fatal("legacy blanket exclusion survived migration")
+				}
+			}
+		}
 	}
 }
 

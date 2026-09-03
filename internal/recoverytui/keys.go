@@ -92,7 +92,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "c":
 			m.scope, m.stage = "core", "hostname-choice"
 		case "h", "enter":
-			m.scope, m.stage = "home", "hostname-choice"
+			m.scope, m.stage = "core-home", "hostname-choice"
 		case "e":
 			m.scope, m.stage = "everything", "hostname-choice"
 		case "a":
@@ -110,7 +110,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if key == "a" {
 			m.adoptIdentity = !m.adoptIdentity
 		} else if key == "enter" || key == "h" {
-			m.scope, m.stage = "home", "hostname-choice"
+			m.scope, m.stage = "core-home", "hostname-choice"
 		} else if key == "c" {
 			m.scope, m.stage = "core", "hostname-choice"
 		} else if key == "e" {
@@ -254,6 +254,16 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input.Focus()
 			m.stage = "confirm"
 			return m, textinput.Blink
+		}
+		return m, nil
+	case "compatibility-warning":
+		if key == "enter" {
+			m.stage = "plan"
+			return m, nil
+		}
+		if key == "esc" {
+			m.close()
+			return m, tea.Quit
 		}
 		return m, nil
 	case "confirm":

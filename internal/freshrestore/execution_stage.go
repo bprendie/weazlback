@@ -26,6 +26,10 @@ func (r *Restore) restoreSelection(ctx context.Context, target string, includeHe
 			return err
 		}
 	}
+	if !r.Plan.includesCore() {
+		_, err := removeWithheldCore(target, r.Plan.OriginalHome, r.Plan.ScopeDecision.WithheldClaims)
+		return err
+	}
 	if includeHeavy && r.Plan.HeavySnapshot != nil {
 		if err := r.restorePoint(ctx, "Heavy", r.Plan.HeavySnapshot.ID, target); err != nil {
 			return err
@@ -72,6 +76,9 @@ func (r *Restore) restoreAndCommitHeavy(ctx context.Context) ([]string, error) {
 }
 
 func (r *Restore) expectedTargets() []string {
+	if !r.Plan.includesCore() && !r.Plan.includesHome() {
+		return nil
+	}
 	if r.Plan.Scope != "" && r.Plan.Scope != "core" {
 		return append([]string(nil), r.Plan.PlacementPaths...)
 	}
@@ -90,6 +97,9 @@ func (r *Restore) expectedTargets() []string {
 }
 
 func (r *Restore) commitSelected() ([]string, error) {
+	if !r.Plan.includesCore() && !r.Plan.includesHome() {
+		return nil, nil
+	}
 	if r.Plan.Scope == "" || r.Plan.Scope == "core" {
 		return r.commitCore()
 	}
@@ -129,6 +139,9 @@ func (r *Restore) validateStage() error {
 		if _, err := os.Lstat(stagedPath(r.StageDir, filepath.Join(r.Plan.OriginalHome, rel))); err != nil {
 			return fmt.Errorf("staged Home path %s is missing: %w", target, err)
 		}
+	}
+	if !r.Plan.includesCore() {
+		return nil
 	}
 	for _, profile := range r.Session.Config.Profiles {
 		if profile.Name != "core" {

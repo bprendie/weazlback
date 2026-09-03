@@ -17,7 +17,7 @@ func TestBrowserCompatibilityRunsOnlyForEligibleHostnameTransition(t *testing.T)
 		scope, source, target string
 		removed               int
 	}{
-		{"core", "old-host", "new-host", 1}, {"home", "old-host", "new-host", 1}, {"everything", "old-host", "new-host", 1},
+		{"core", "old-host", "new-host", 1}, {"home", "old-host", "new-host", 1}, {"core-home", "old-host", "new-host", 1}, {"everything", "old-host", "new-host", 1},
 		{"applications", "old-host", "new-host", 0}, {"core", "same-host", "same-host", 0}, {"core", "", "new-host", 0},
 	} {
 		t.Run(test.scope+test.source+test.target, func(t *testing.T) {
@@ -39,6 +39,22 @@ func TestBrowserCompatibilityRunsOnlyForEligibleHostnameTransition(t *testing.T)
 				t.Fatal("ineligible restore changed lock")
 			}
 		})
+	}
+}
+
+func TestWithheldCrossPlatformCoreDoesNotTouchTargetBrowsers(t *testing.T) {
+	r := Restore{Plan: Plan{
+		Scope:          "core",
+		SourceHostname: "source-host",
+		Hostname:       "target-host",
+		ScopeDecision: ScopeDecision{
+			Requested:        "core",
+			IncludeCore:      false,
+			PlatformMismatch: true,
+		},
+	}}
+	if r.browserRepairEligible() {
+		t.Fatal("withheld Core must not mutate target browser state")
 	}
 }
 

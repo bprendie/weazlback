@@ -110,7 +110,7 @@ func Default() Config {
 		Profiles: []Profile{
 			{Name: "core", Includes: core,
 				Excludes: []string{"**/Cache/**", "**/cache/**", "**/.cache/**"}},
-			{Name: "home", Includes: []string{home}, Excludes: []string{filepath.Join(home, "containers", "**"), filepath.Join(home, ".cache", "**")}},
+			{Name: "home", Includes: []string{home}, Excludes: []string{filepath.Join(home, "containers", "**")}},
 			{Name: "heavy", Includes: []string{filepath.Join(home, "containers")}},
 		},
 	}
@@ -251,6 +251,9 @@ func Load(path string) (Config, error) {
 		if cfg.Profiles[i].Name == "core" {
 			home, _ := os.UserHomeDir()
 			cfg.Profiles[i].Includes = appendUnique(cfg.Profiles[i].Includes, weazlRoots(home)...)
+		}
+		if cfg.Profiles[i].Name == "home" {
+			changed = migrateHomeProfile(&cfg.Profiles[i]) || changed
 		}
 	}
 	if changed {

@@ -46,7 +46,7 @@ func (m Model) body() string {
 		if m.adoptIdentity {
 			adoption = "ON — this replacement continues the source identity"
 		}
-		return "RECOVERY SCOPE\n\n[c] Core — settings, applications, packages, services, hostname\n[h / enter] Home — Core + applications + normal home files (recommended)\n[e] Everything — Core + applications + Home + VMs / containers / Heavy data\n\n[a] Replacement identity: " + adoption
+		return "RECOVERY SCOPE\n\n[c] Core — System personality\n[h / enter] Core + Home — Personality and personal data\n[e] Everything — Full configured recovery\n\n[a] Replacement identity: " + adoption
 	case "target-identity":
 		return "TARGET MACHINE IDENTITY\n\n[c / enter] Keep this installation's identity\n[n] Generate a new independent machine identity\n[a] Replacement hardware — explicitly adopt the selected source identity\n\nHostname is selected separately on the next screen."
 	case "action-choice":
@@ -54,7 +54,7 @@ func (m Model) body() string {
 		if m.catalogPath != "" {
 			catalogState = "encrypted catalog ready at " + m.catalogPath
 		}
-		return "RECOVERY WORKSPACE\n\n[c] System Config + Applications\n[h / enter] Personal Files + System Config + Applications\n[e] Everything: Applications + System Config + Home + VMs / Containers\n[a] Applications only\n[f] Select one file or directory\n[i] Build optional encrypted history catalog\n\nSource identity  " + m.machineID + "\nTarget identity  " + targetIdentityText(m) + "\nCatalog          " + catalogState
+		return "RECOVERY WORKSPACE\n\n[c] Core — System personality\n[h / enter] Core + Home — Personality and personal data\n[e] Everything — Full configured recovery\n\nTOOLS\n[a] Applications only\n[f] Select one file or directory\n[i] Build optional encrypted history catalog\n\nSource identity  " + m.machineID + "\nTarget identity  " + targetIdentityText(m) + "\nCatalog          " + catalogState
 	case "destination-loading":
 		return "◉ Unlocking recovery kit and reading destinations…"
 	case "identity-loading":
@@ -101,6 +101,8 @@ func (m Model) body() string {
 			}
 		}
 		return freshrestore.PlanText(p) + engine + fmt.Sprintf("\nManual review  %d items\n\nEXACT RESTORE QUEUE [%d/%d]\n%s\n\n↑/↓ review all • enter continue", len(m.review), start+1, len(m.review), strings.Join(m.review[start:end], "\n"))
+	case "compatibility-warning":
+		return "CROSS-PLATFORM RESTORE\n\n" + freshrestore.PlatformMismatchWarning + "\n\n[enter] Continue\n[esc] Cancel"
 	case "running":
 		return m.progressView()
 	case "done":

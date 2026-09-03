@@ -50,8 +50,12 @@ func (m Model) updateRestoreMessage(message tea.Msg) (tea.Model, tea.Cmd, bool) 
 			m.err, m.restoreStage = msg.err.Error(), "bundle-components"
 			return m, nil, true
 		}
-		m.restoreBundleParts, m.restoreBasket = msg.components, msg.basket
+		m.restoreBundleParts, m.restoreBasket, m.restoreScopeDecision = msg.components, msg.basket, msg.decision
 		m.restoreTargetMode, m.restoreConflict = "original", restoretxn.OverlayPreserving
+		if msg.decision.PlatformMismatch {
+			m.restoreStage, m.status = "bundle-compatibility-warning", "Core withheld for cross-platform restore"
+			return m, nil, true
+		}
 		model, cmd := m.startRestoreTransactionPreflight("")
 		return model, cmd, true
 	case restoreTransactionPreflightMsg:

@@ -30,6 +30,19 @@ func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.restoreStage == "bundle-compatibility-warning" {
+		if key == "enter" {
+			if len(m.restoreBasket) == 0 {
+				m.restoreStage, m.status = "dashboard", "Core withheld; no compatible payload remains"
+				return m, nil
+			}
+			return m.startRestoreTransactionPreflight("")
+		}
+		if key == "esc" {
+			m.restoreStage = "bundle-components"
+		}
+		return m, nil
+	}
 	if m.restoreStage == "bundle-safety" {
 		if key == "y" {
 			return m.runBundleSafetyBackup()

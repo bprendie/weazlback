@@ -8,7 +8,9 @@ import (
 
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
+	"github.com/bprendie/weazlback/internal/freshrestore"
 	"github.com/bprendie/weazlback/internal/restic"
+	"github.com/bprendie/weazlback/internal/restoretxn"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -28,6 +30,30 @@ func TestRestoreModeOnlyEntersFromFocusedRailAndReturnsFromDashboard(t *testing.
 	returned := updated.(Model)
 	if returned.workspace != "backup" || returned.mode != modeTune || returned.index != 8 || !returned.railFocused {
 		t.Fatalf("backup state was not preserved: mode=%v index=%d rail=%v", returned.mode, returned.index, returned.railFocused)
+	}
+}
+
+func TestBundleChoicesAreThreeFocusedPresets(t *testing.T) {
+	m := Model{styles: newStyles(), restoreBundleChoices: map[restoretxn.Bundle]bool{}}
+	updated, _ := m.updateBundleComponentsKey("h")
+	m = updated.(Model)
+	if !m.restoreBundleChoices[restoretxn.SystemConfig] || !m.restoreBundleChoices[restoretxn.PersonalFiles] || m.restoreBundleChoices[restoretxn.HeavyData] {
+		t.Fatalf("Core + Home preset=%v", m.restoreBundleChoices)
+	}
+	updated, _ = m.updateBundleComponentsKey("e")
+	m = updated.(Model)
+	if !m.restoreBundleChoices[restoretxn.SystemConfig] || !m.restoreBundleChoices[restoretxn.PersonalFiles] || !m.restoreBundleChoices[restoretxn.HeavyData] {
+		t.Fatalf("Everything preset=%v", m.restoreBundleChoices)
+	}
+}
+
+func TestBundlePlatformMismatchUsesSharedWarning(t *testing.T) {
+	m := Model{styles: newStyles(), restoreBasket: map[string]restoreBasketItem{"/home/me/Documents": {}}, restoreStage: "bundle-components"}
+	decision := freshrestore.ScopeDecision{PlatformMismatch: true, Warning: freshrestore.PlatformMismatchWarning}
+	updated, _, handled := m.updateRestoreMessage(bundlePreparedMsg{decision: decision, basket: m.restoreBasket})
+	m = updated.(Model)
+	if !handled || m.restoreStage != "bundle-compatibility-warning" || strings.Count(m.restoreScreen(), freshrestore.PlatformMismatchWarning) != 1 {
+		t.Fatalf("stage=%q", m.restoreStage)
 	}
 }
 

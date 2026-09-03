@@ -9,6 +9,7 @@ import (
 	"github.com/bprendie/weazlback/internal/apprestore"
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
+	"github.com/bprendie/weazlback/internal/freshrestore"
 	"github.com/bprendie/weazlback/internal/heavy"
 	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/packagecapsule"
@@ -116,6 +117,7 @@ type Model struct {
 	restoreBundleParts   []restoretxn.Component
 	restoreBundleDeletes []string
 	restoreBundleJournal string
+	restoreScopeDecision freshrestore.ScopeDecision
 	restoreSafetyBackup  bool
 	restoreAppPlan       apprestore.Plan
 	restoreAppResult     apprestore.Result

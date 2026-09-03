@@ -7,6 +7,7 @@ import (
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/packagecapsule"
+	"github.com/bprendie/weazlback/internal/platform"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/vault"
 )
@@ -37,6 +38,7 @@ type Options struct {
 	TurboPolicy           TurboPolicy
 	RestoreEngine         RestoreEngine
 	FallbackEngine        RestoreEngine
+	TargetPlatform        *platform.Identity
 }
 
 type TurboPolicy struct {
@@ -136,6 +138,9 @@ type Plan struct {
 	PlacementPaths        []string                       `json:"placement_paths,omitempty"`
 	HeavyPlacementPaths   []string                       `json:"heavy_placement_paths,omitempty"`
 	ArtifactFiles         map[string]string              `json:"artifact_files,omitempty"`
+	SourcePlatform        platform.Identity              `json:"source_platform"`
+	TargetPlatform        platform.Identity              `json:"target_platform"`
+	ScopeDecision         ScopeDecision                  `json:"scope_decision"`
 }
 
 type Journal struct {
@@ -170,6 +175,7 @@ type Journal struct {
 	Qualification         Qualification        `json:"qualification,omitempty"`
 	Timing                RecoveryTiming       `json:"timing,omitempty"`
 	Recompression         string               `json:"recompression,omitempty"`
+	ScopeDecision         ScopeDecision        `json:"scope_decision,omitempty"`
 }
 
 type Report struct {

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/bprendie/weazlback/internal/platform"
 )
 
 const ManifestName = "weazlback-package-capsule-v1.json"
@@ -82,6 +84,7 @@ func inventoryManifest(options Options) (Manifest, error) {
 		return Manifest{}, errors.New("installed package inventory is empty")
 	}
 	hostname, _ := os.Hostname()
+	identity := platform.Current()
 	arch := runtime.GOARCH
 	if arch == "amd64" {
 		arch = "x86_64"
@@ -107,7 +110,7 @@ func inventoryManifest(options Options) (Manifest, error) {
 	systemUnits, _ := options.Run.Output("systemctl", "list-unit-files", "--state=enabled", "--no-legend")
 	userUnits, _ := options.Run.Output("systemctl", "--user", "list-unit-files", "--state=enabled", "--no-legend")
 	return Manifest{SchemaVersion: SchemaVersion, CapturedAt: time.Now().UTC(), Hostname: hostname,
-		Architecture: arch, MachineID: options.MachineID, Packages: packages,
+		Architecture: arch, MachineID: options.MachineID, Platform: identity, PackageFamily: identity.PackageFamily, Packages: packages,
 		Flatpaks: nonemptyLines(flatpaks), SystemUnits: unitNames(systemUnits), UserUnits: unitNames(userUnits),
 		Summary: Summary{Installed: len(packages), Official: officialCount, Foreign: foreignCount}}, nil
 }

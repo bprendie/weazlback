@@ -47,6 +47,7 @@ func (r *Restore) restoreApplicationManifest(ctx context.Context) (inventory.App
 	if err := inventory.ValidateApplications(manifest); err != nil {
 		return manifest, err
 	}
+	manifest = inventory.NormalizeApplications(manifest, r.Plan.OriginalHome)
 	r.Plan.ArtifactFiles = map[string]string{}
 	for _, artifact := range manifest.AURArtifacts {
 		r.Plan.ArtifactFiles[artifact.Package] = stagedPath(metaDir, filepath.Join(include, "aur-artifacts", artifact.File))

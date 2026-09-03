@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/inventory"
+	"github.com/bprendie/weazlback/internal/platform"
 	"github.com/bprendie/weazlback/internal/restic"
 )
 
@@ -34,6 +34,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	if options.Scope == "" {
 		options.Scope = "core"
 	}
+	options.Scope = normalizeRecoveryScope(options.Scope)
 	if options.Engine == "" {
 		options.Engine = EngineStandard
 	}
@@ -116,7 +117,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		SourceMachineID: machineID, TargetMachineID: targetMachineID, AdoptSourceIdentity: options.AdoptSourceIdentity,
 		PersistTargetIdentity: options.PersistTargetIdentity}
 	r.Plan.PackageSnapshot = selectLatestPackageSnapshot(snapshots)
-	if options.Scope == "home" || options.Scope == "everything" {
+	if options.Scope == "core-home" || options.Scope == "everything" {
 		home, selectErr := selectProfileSnapshotAt(snapshots, "home", snapshot.Time)
 		if selectErr != nil {
 			r.Close()
@@ -166,6 +167,12 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		return nil, err
 	}
 	r.Plan.Applications = &manifest
+	targetPlatform := platform.Current()
+	if options.TargetPlatform != nil {
+		targetPlatform = *options.TargetPlatform
+	}
+	r.Plan.SourcePlatform, r.Plan.TargetPlatform = manifest.Platform, targetPlatform
+	r.Plan.ScopeDecision = PlanScope(options.Scope, manifest.Platform, targetPlatform, manifest.CoreClaims)
 	r.Plan.SourceHostname = manifest.Hostname
 	r.Plan.Hostname, err = ResolveHostname(options.Hostname, manifest.Hostname)
 	if err != nil {
@@ -174,6 +181,17 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	}
 	r.Plan.Official, r.Plan.AUR, r.Plan.Flatpak = MissingApplications(ctx, manifest)
 	r.Plan.SystemServices, r.Plan.UserServices = MissingServices(ctx, manifest)
+	if r.Plan.ScopeDecision.PlatformMismatch {
+		current, _ := os.Hostname()
+		r.Plan.Hostname = current
+		r.Plan.SystemServices, r.Plan.UserServices, r.Plan.LocalApps = nil, nil, nil
+		if manifest.Platform.Family != targetPlatform.Family || manifest.Platform.PackageFamily != targetPlatform.PackageFamily {
+			r.Plan.Official, r.Plan.AUR, r.Plan.PackageSnapshot = nil, nil, nil
+		}
+		if !r.Plan.ScopeDecision.IncludeApplications {
+			r.Plan.Flatpak = nil
+		}
+	}
 	if r.Plan.PackageSnapshot != nil {
 		capsule, manifestPath, capsuleErr := r.loadPackageCapsule(ctx)
 		if capsuleErr != nil {
@@ -194,7 +212,9 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		capsuleApps := inventory.ApplicationManifest{Services: inventory.ServiceInventory{SystemEnabled: capsule.SystemUnits, UserEnabled: capsule.UserUnits}}
 		r.Plan.SystemServices, r.Plan.UserServices = MissingServices(ctx, capsuleApps)
 	}
-	r.Plan.LocalApps = append([]string(nil), manifest.WeazlApps...)
+	if r.Plan.ScopeDecision.IncludeCore {
+		r.Plan.LocalApps = append([]string(nil), manifest.WeazlApps...)
+	}
 	r.JournalPath = filepath.Join(options.WorkDir, session.Destination.ID+"-"+options.Scope+"-journal.json")
 	r.StageDir = filepath.Join(options.WorkDir, session.Destination.ID+"-"+options.Scope+"-stage")
 	r.PackageStageDir = r.StageDir + "-packages"
@@ -245,40 +265,11 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		if r.Plan.PackageSnapshot != nil {
 			r.Journal.PackageSnapshotID = r.Plan.PackageSnapshot.ID
 		}
+		r.Journal.ScopeDecision = r.Plan.ScopeDecision
 	}
 	if r.Journal.Stage == "snapshot_selected" {
 		r.configureEngine(requiredBytes)
 	}
 	err = SaveJournal(r.JournalPath, r.Journal)
 	return r, err
-}
-
-func (r *Restore) configureEngine(requiredBytes uint64) {
-	r.Journal.Engine, r.Journal.RequestedEngine = EngineStandard, EngineStandard
-	r.Journal.FallbackEngine, r.Journal.FallbackPhase, r.Journal.FallbackReason = "", "", ""
-	requestedTurbo := r.Options.Engine == EngineTurbo || (r.Options.RestoreEngine != nil && r.Options.RestoreEngine.Name() != EngineStandard)
-	if !requestedTurbo {
-		return
-	}
-	transport := "local"
-	if r.Session.Destination.Kind == "ssh" {
-		transport = "ssh"
-	}
-	sourcePath := ""
-	if transport == "local" {
-		sourcePath = r.Session.Repository.Location
-	}
-	r.Journal.Qualification = QualifyTurboSource(r.Options.TargetHome, sourcePath, transport, r.Options.TurboPolicy)
-	requireRestoreSpace(&r.Journal.Qualification, requiredBytes)
-	r.Journal.RequestedEngine = EngineTurbo
-	if r.Journal.Qualification.Eligible {
-		r.Journal.Engine = EngineTurbo
-		return
-	}
-	r.Journal.FallbackEngine, r.Journal.FallbackPhase = EngineStandard, "qualification"
-	r.Journal.FallbackReason = strings.Join(append(r.Journal.Qualification.HardFailures, r.Journal.Qualification.SoftFindings...), "; ")
-}
-
-func validRecoveryScope(scope string) bool {
-	return scope == "core" || scope == "home" || scope == "everything" || scope == "applications"
 }

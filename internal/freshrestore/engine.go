@@ -3,6 +3,7 @@ package freshrestore
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -13,6 +14,32 @@ const (
 type RestoreEngine interface {
 	Name() string
 	Stage(context.Context, *Restore) error
+}
+
+func (r *Restore) configureEngine(requiredBytes uint64) {
+	r.Journal.Engine, r.Journal.RequestedEngine = EngineStandard, EngineStandard
+	r.Journal.FallbackEngine, r.Journal.FallbackPhase, r.Journal.FallbackReason = "", "", ""
+	requestedTurbo := r.Options.Engine == EngineTurbo || (r.Options.RestoreEngine != nil && r.Options.RestoreEngine.Name() != EngineStandard)
+	if !requestedTurbo {
+		return
+	}
+	transport := "local"
+	if r.Session.Destination.Kind == "ssh" {
+		transport = "ssh"
+	}
+	sourcePath := ""
+	if transport == "local" {
+		sourcePath = r.Session.Repository.Location
+	}
+	r.Journal.Qualification = QualifyTurboSource(r.Options.TargetHome, sourcePath, transport, r.Options.TurboPolicy)
+	requireRestoreSpace(&r.Journal.Qualification, requiredBytes)
+	r.Journal.RequestedEngine = EngineTurbo
+	if r.Journal.Qualification.Eligible {
+		r.Journal.Engine = EngineTurbo
+		return
+	}
+	r.Journal.FallbackEngine, r.Journal.FallbackPhase = EngineStandard, "qualification"
+	r.Journal.FallbackReason = strings.Join(append(r.Journal.Qualification.HardFailures, r.Journal.Qualification.SoftFindings...), "; ")
 }
 
 type standardEngine struct{}

@@ -15,20 +15,34 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestGuidedRecoveryDefaultsToHomeScope(t *testing.T) {
+func TestGuidedRecoveryDefaultsToCoreHomeScope(t *testing.T) {
 	m := New()
-	if m.scope != "home" {
+	if m.scope != "core-home" {
 		t.Fatalf("scope=%q", m.scope)
 	}
 	m.stage = "scope-choice"
 	view := m.View()
-	for _, wanted := range []string{"Core", "Home", "Everything"} {
+	for _, wanted := range []string{"Core —", "Core + Home", "Everything"} {
 		if !strings.Contains(view, wanted) {
 			t.Fatalf("scope view missing %q: %s", wanted, view)
 		}
 	}
-	if !strings.Contains(view, "Everything — Core +") || !strings.Contains(view, "applications + Home + VMs /") {
-		t.Fatalf("Everything scope does not explicitly include applications: %s", view)
+	if !strings.Contains(view, "Everything") || !strings.Contains(view, "Full configured") {
+		t.Fatalf("Everything scope is ambiguous: %s", view)
+	}
+}
+
+func TestPlatformMismatchUsesOneWarningInterstitial(t *testing.T) {
+	m := New()
+	prepared := &freshrestore.Restore{Plan: freshrestore.Plan{ScopeDecision: freshrestore.ScopeDecision{PlatformMismatch: true, Warning: freshrestore.PlatformMismatchWarning}}}
+	updated, _ := m.Update(preparedMsg{restore: prepared})
+	m = updated.(Model)
+	if m.stage != "compatibility-warning" || strings.Count(m.body(), freshrestore.PlatformMismatchWarning) != 1 {
+		t.Fatalf("stage=%q view=%q", m.stage, m.View())
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if updated.(Model).stage != "plan" {
+		t.Fatal("continue did not reach plan")
 	}
 }
 
@@ -155,7 +169,7 @@ func TestRecoveryWorkspaceSeparatesSourceTargetIdentityAndActions(t *testing.T) 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	view := m.View()
-	for _, value := range []string{"System Config", "Personal Files", "Everything", "Applications only", "Select one file"} {
+	for _, value := range []string{"Core", "Personality and personal data", "Everything", "Applications only", "Select one file"} {
 		if !strings.Contains(view, value) {
 			t.Fatalf("action workspace missing %q", value)
 		}

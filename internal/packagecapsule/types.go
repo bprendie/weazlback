@@ -3,23 +3,27 @@ package packagecapsule
 import (
 	"context"
 	"time"
+
+	"github.com/bprendie/weazlback/internal/platform"
 )
 
 const SchemaVersion = 1
 
 type Manifest struct {
-	SchemaVersion int         `json:"schema_version"`
-	CapturedAt    time.Time   `json:"captured_at"`
-	Hostname      string      `json:"hostname"`
-	Architecture  string      `json:"architecture"`
-	MachineID     string      `json:"machine_id"`
-	Packages      []Package   `json:"packages"`
-	Flatpaks      []string    `json:"flatpaks,omitempty"`
-	SystemUnits   []string    `json:"system_units,omitempty"`
-	UserUnits     []string    `json:"user_units,omitempty"`
-	ManualReview  []string    `json:"manual_review,omitempty"`
-	Exceptions    []Exception `json:"exceptions,omitempty"`
-	Summary       Summary     `json:"summary"`
+	SchemaVersion int               `json:"schema_version"`
+	CapturedAt    time.Time         `json:"captured_at"`
+	Hostname      string            `json:"hostname"`
+	Architecture  string            `json:"architecture"`
+	MachineID     string            `json:"machine_id"`
+	Platform      platform.Identity `json:"platform,omitempty"`
+	PackageFamily string            `json:"package_family,omitempty"`
+	Packages      []Package         `json:"packages"`
+	Flatpaks      []string          `json:"flatpaks,omitempty"`
+	SystemUnits   []string          `json:"system_units,omitempty"`
+	UserUnits     []string          `json:"user_units,omitempty"`
+	ManualReview  []string          `json:"manual_review,omitempty"`
+	Exceptions    []Exception       `json:"exceptions,omitempty"`
+	Summary       Summary           `json:"summary"`
 }
 
 type Package struct {

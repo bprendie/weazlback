@@ -60,7 +60,7 @@ func TestHeavyCommitFollowsUsableHomePlacement(t *testing.T) {
 }
 
 func TestApplicationsIsAFirstClassRecoveryScope(t *testing.T) {
-	for _, scope := range []string{"core", "home", "everything", "applications"} {
+	for _, scope := range []string{"core", "core-home", "home", "everything", "applications"} {
 		if !validRecoveryScope(scope) {
 			t.Fatalf("scope %q rejected", scope)
 		}

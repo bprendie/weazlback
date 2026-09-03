@@ -52,7 +52,7 @@ func main() {
 	destination := flag.String("destination", "", "repository destination ID embedded in the recovery kit")
 	hostname := flag.String("hostname", "original", "original, current, or a custom hostname")
 	snapshot := flag.String("snapshot", "latest", "Core Restore Point ID or latest")
-	scope := flag.String("scope", "core", "recovery scope: core, home, everything, or applications")
+	scope := flag.String("scope", "core", "recovery scope: core, core-home, everything, or applications (home remains a legacy alias)")
 	targetHome := flag.String("target-home", "", "fresh-system home directory")
 	workDir := flag.String("work-dir", "", "private resumable restore workspace")
 	planOnly := flag.Bool("plan-only", false, "verify and print the plan without changing the system")

@@ -9,15 +9,19 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/bprendie/weazlback/internal/platform"
 )
 
-const ApplicationSchemaVersion = 1
+const ApplicationSchemaVersion = 2
 
 type ApplicationManifest struct {
 	SchemaVersion  int                `json:"schema_version"`
 	CapturedAt     time.Time          `json:"captured_at"`
 	Hostname       string             `json:"hostname"`
 	Omarchy        string             `json:"omarchy_version,omitempty"`
+	Platform       platform.Identity  `json:"platform,omitempty"`
+	CoreClaims     []platform.Claim   `json:"core_claims,omitempty"`
 	Packages       PackageInventory   `json:"packages"`
 	PackagePlan    PackageRestorePlan `json:"package_restore_plan"`
 	Services       ServiceInventory   `json:"services"`
@@ -57,9 +61,11 @@ func CaptureApplications(ctx context.Context) (ApplicationManifest, error) {
 		return ApplicationManifest{}, err
 	}
 	hostname, _ := os.Hostname()
+	identity := platform.Current()
 	pkgs := packages(ctx)
 	m := ApplicationManifest{SchemaVersion: ApplicationSchemaVersion, CapturedAt: time.Now().UTC(),
-		Hostname: hostname, Omarchy: firstLine(run(ctx, "omarchy", "version")), Packages: pkgs,
+		Hostname: hostname, Omarchy: firstLine(run(ctx, "omarchy", "version")), Platform: identity,
+		CoreClaims: platform.For(identity).CoreClaims(home), Packages: pkgs,
 		PackagePlan: PackageRestorePlan{Official: clone(pkgs.OfficialExplicit), AUR: clone(pkgs.ForeignExplicit), Flatpak: clone(pkgs.FlatpakApps)},
 		Services:    services(ctx), FlatpakRemotes: lines(run(ctx, "flatpak", "remotes", "--columns=name,url")),
 		OmarchyPlugins: directoryNames(filepath.Join(home, ".config", "omarchy", "plugins")),
@@ -99,7 +105,7 @@ func WriteApplications(path string, manifest ApplicationManifest) error {
 }
 
 func ValidateApplications(manifest ApplicationManifest) error {
-	if manifest.SchemaVersion != ApplicationSchemaVersion {
+	if manifest.SchemaVersion != 1 && manifest.SchemaVersion != ApplicationSchemaVersion {
 		return errors.New("unsupported application manifest schema")
 	}
 	if manifest.CapturedAt.IsZero() || manifest.Hostname == "" {
@@ -109,6 +115,20 @@ func ValidateApplications(manifest ApplicationManifest) error {
 		return errors.New("application package inventory is empty")
 	}
 	return nil
+}
+
+func NormalizeApplications(manifest ApplicationManifest, home string) ApplicationManifest {
+	if manifest.Platform.Known() {
+		return manifest
+	}
+	if manifest.SchemaVersion == 1 || manifest.Omarchy != "" {
+		manifest.Platform = platform.Identity{SchemaVersion: platform.IdentitySchemaVersion, ID: "omarchy", Family: "arch",
+			PackageFamily: "pacman", Desktop: "omarchy-shell"}
+		if home != "" {
+			manifest.CoreClaims = platform.For(manifest.Platform).CoreClaims(home)
+		}
+	}
+	return manifest
 }
 
 func directoryNames(root string) []string {

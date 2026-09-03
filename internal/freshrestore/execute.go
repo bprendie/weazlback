@@ -29,7 +29,7 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 		return report, err
 	}
 	currentHostname, _ := os.Hostname()
-	if r.Plan.Hostname != currentHostname || len(r.Plan.Official)+len(r.Plan.AUR)+len(r.Plan.SystemServices)+len(r.Plan.PackageDelta.Local) > 0 {
+	if r.Plan.includesCore() && r.Plan.Hostname != currentHostname || len(r.Plan.Official)+len(r.Plan.AUR)+len(r.Plan.SystemServices)+len(r.Plan.PackageDelta.Local) > 0 {
 		if err := AuthorizeSudo(); err != nil {
 			return report, fmt.Errorf("sudo authorization: %w", err)
 		}
@@ -42,7 +42,7 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 		}
 	}
 	if !stageAtLeast(r.Journal.Stage, "hostname_applied") {
-		if r.Plan.Scope != "applications" {
+		if r.Plan.Scope != "applications" && r.Plan.includesCore() {
 			if err := ApplyHostname(r.Plan.Hostname); err != nil {
 				return report, fmt.Errorf("apply hostname: %w", err)
 			}
