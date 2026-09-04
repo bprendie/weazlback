@@ -76,8 +76,19 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.busy, m.err, m.status = false, msg.err.Error(), "System Snapshot authorization failed"
 			return m, nil
 		}
+		if msg.action == "list" || msg.action == "verify" {
+			if active := m.cfg.Active(); active != nil && active.Kind == "local" {
+				active.Privileged = true
+				if path, err := config.Path(); err == nil {
+					_ = config.Save(path, m.cfg)
+				}
+			}
+		}
 		if msg.action == "list" {
 			return m.beginSystemSnapshotList()
+		}
+		if msg.action == "verify" {
+			return m.beginSystemSnapshotVerify()
 		}
 		return m.beginDirectSystemSnapshot(msg.action)
 	case systemSnapshotDoneMsg:
@@ -103,6 +114,14 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.err, m.status = msg.err.Error(), "System Snapshot list failed"
 		} else {
 			m.systemSnapshotSets, m.err, m.status = msg.sets, "", "System Snapshot generations loaded"
+		}
+		return m, nil
+	case systemSnapshotVerifyMsg:
+		m.busy = false
+		if msg.err != nil {
+			m.err, m.status = msg.err.Error(), "System Snapshot verify failed"
+		} else {
+			m.err, m.status = "", "System Snapshot "+msg.id+" verified"
 		}
 		return m, nil
 	case packageSudoDoneMsg:
