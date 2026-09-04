@@ -53,6 +53,9 @@ func (m Model) beginDirectSystemSnapshot(action string) (tea.Model, tea.Cmd) {
 		m.busy, m.err = false, err.Error()
 		return m, nil
 	}
+	// authorizeSystemSnapshot completed a visible sudo handshake immediately
+	// before this call. Use it for source paths the desktop user cannot read.
+	repo.Elevated = true
 	cfg, v := m.cfg, m.vault
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel, m.operation, m.systemSnapshotStart = cancel, "Full System Snapshot "+action, time.Now()

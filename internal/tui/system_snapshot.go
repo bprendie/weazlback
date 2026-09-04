@@ -31,17 +31,10 @@ func (m Model) runSystemSnapshotAction(action string) (tea.Model, tea.Cmd) {
 		return m.authorizeSystemSnapshot(action)
 	}
 	if action == "list" {
-		_, _, repo, err := m.activeRuntime("")
-		if err != nil {
-			m.err = err.Error()
-			return m, nil
+		if active := m.cfg.Active(); active != nil && active.Privileged {
+			return m.authorizeSystemSnapshot("list")
 		}
-		machineID := m.cfg.Machine.ID
-		m.busy, m.operation, m.err = true, "System Snapshot list", ""
-		return m, func() tea.Msg {
-			points, listErr := restic.NewService(io.Discard).SnapshotsForMachine(context.Background(), repo, machineID)
-			return systemSnapshotListMsg{sets: generation.Catalog(points), err: listErr}
-		}
+		return m.beginSystemSnapshotList()
 	}
 	executable, err := os.Executable()
 	if err != nil {
@@ -63,6 +56,20 @@ func (m Model) runSystemSnapshotAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return operationDoneMsg{err: err}
 	})
+}
+
+func (m Model) beginSystemSnapshotList() (tea.Model, tea.Cmd) {
+	_, _, repo, err := m.activeRuntime("")
+	if err != nil {
+		m.busy, m.err = false, err.Error()
+		return m, nil
+	}
+	machineID := m.cfg.Machine.ID
+	m.busy, m.operation, m.err = true, "System Snapshot list", ""
+	return m, func() tea.Msg {
+		points, listErr := restic.NewService(io.Discard).SnapshotsForMachine(context.Background(), repo, machineID)
+		return systemSnapshotListMsg{sets: generation.Catalog(points), err: listErr}
+	}
 }
 
 func lastDiagnostic(value string) string {

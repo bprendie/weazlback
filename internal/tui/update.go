@@ -76,6 +76,9 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.busy, m.err, m.status = false, msg.err.Error(), "System Snapshot authorization failed"
 			return m, nil
 		}
+		if msg.action == "list" {
+			return m.beginSystemSnapshotList()
+		}
 		return m.beginDirectSystemSnapshot(msg.action)
 	case systemSnapshotDoneMsg:
 		m.busy, m.cancel = false, nil
