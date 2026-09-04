@@ -87,6 +87,8 @@ type Model struct {
 	pendingPass          string
 	busy                 bool
 	operation            string
+	systemSnapshotLanes  map[string]systemSnapshotLane
+	systemSnapshotStart  time.Time
 	progress             restic.BackupProgress
 	snapshots            []restic.Snapshot
 	cancel               context.CancelFunc

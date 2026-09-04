@@ -15,12 +15,17 @@ type candidate struct {
 func harvest(options Options, root string, manifest *Manifest) {
 	roots := cacheRoots(root)
 	destination := filepath.Join(root, "artifacts")
+	totals, completed := map[string]int{}, map[string]int{}
+	for _, pkg := range manifest.Packages {
+		totals[pkg.Source]++
+	}
 	for index := range manifest.Packages {
 		if options.Context.Err() != nil {
 			return
 		}
 		pkg := &manifest.Packages[index]
-		emit(options, Progress{Phase: "harvest", Package: pkg.Name, Completed: index, Total: len(manifest.Packages), Bytes: manifest.Summary.Bytes})
+		emit(options, Progress{Phase: "harvest", Package: pkg.Name, Source: pkg.Source, Completed: completed[pkg.Source], Total: totals[pkg.Source], Bytes: manifest.Summary.Bytes})
+		completed[pkg.Source]++
 		selected, err := selectCandidate(options.Run, roots, *pkg)
 		if err != nil {
 			manifest.Summary.Missing++
@@ -56,7 +61,9 @@ func harvest(options Options, root string, manifest *Manifest) {
 		manifest.Summary.Bytes += bytes
 		captureSignature(selected.path, destination, pkg)
 	}
-	emit(options, Progress{Phase: "complete", Completed: len(manifest.Packages), Total: len(manifest.Packages), Bytes: manifest.Summary.Bytes})
+	for source, total := range totals {
+		emit(options, Progress{Phase: "complete", Source: source, Completed: total, Total: total, Bytes: manifest.Summary.Bytes})
+	}
 	if len(manifest.Flatpaks) > 0 {
 		manifest.ManualReview = append(manifest.ManualReview, "Flatpak applications are manifest-only and require their configured remotes during recovery")
 	}

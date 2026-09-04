@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/restic"
@@ -138,5 +139,29 @@ func TestViewsRespectReportedTerminalSize(t *testing.T) {
 		if lipgloss.Height(view) > size.height || lipgloss.Width(view) > size.width {
 			t.Errorf("terminal %dx%d rendered %dx%d", size.width, size.height, lipgloss.Width(view), lipgloss.Height(view))
 		}
+	}
+}
+
+func TestSystemSnapshotShowsFiveLiveLanesAtEightyByTwentyFour(t *testing.T) {
+	m := Model{styles: newStyles(), mode: modeSystemSnapshot, busy: true, width: 80, height: 24, systemSnapshotStart: time.Now(),
+		systemSnapshotLanes: map[string]systemSnapshotLane{
+			"packages": {State: "harvest", Current: "restic", Completed: 4, Total: 8, Percent: .5},
+			"aur":      {State: "running", Current: "cached artifacts"},
+			"core":     {State: "running", Current: "40/100 files", Completed: 40, Total: 100, Rate: 20 << 20},
+			"home":     {State: "running", Current: "50/100 files", Completed: 50, Total: 100},
+			"heavy":    {State: "preflight", Current: "checking workloads"},
+		},
+	}
+	view := m.View()
+	for _, lane := range []string{"PACKAGES", "AUR", "CORE", "HOME", "HEAVY"} {
+		if !strings.Contains(view, lane) {
+			t.Fatalf("missing %s lane: %q", lane, view)
+		}
+	}
+	if !strings.Contains(view, "20.0 MiB/s") {
+		t.Fatalf("missing live lane speed: %q", view)
+	}
+	if lipgloss.Height(view) > 24 || lipgloss.Width(view) > 80 {
+		t.Fatalf("80x24 snapshot rendered %dx%d", lipgloss.Width(view), lipgloss.Height(view))
 	}
 }

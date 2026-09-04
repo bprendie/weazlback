@@ -66,6 +66,7 @@ type Summary struct {
 
 type Progress struct {
 	Phase, Package string
+	Source         string
 	Completed      int
 	Total          int
 	Bytes          int64

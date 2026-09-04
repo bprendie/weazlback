@@ -21,7 +21,7 @@ func downloadOfficial(options Options, root string, manifest *Manifest) {
 	if len(missing) == 0 {
 		return
 	}
-	emit(options, Progress{Phase: "download", Package: missing[0], Total: len(missing)})
+	emit(options, Progress{Phase: "download", Package: missing[0], Source: "official", Total: len(missing)})
 	destination := filepath.Join(root, "download-cache")
 	_ = os.MkdirAll(destination, 0o700)
 	args := []string{"-n", "pacman", "-Sw", "--noconfirm", "--cachedir", destination, "--"}
@@ -43,7 +43,7 @@ func buildForeign(options Options, root string, manifest *Manifest) {
 			manifest.Exceptions = append(manifest.Exceptions, Exception{Package: pkg.Name, Code: "unsafe-package-name", Detail: "refused AUR URL construction"})
 			continue
 		}
-		emit(options, Progress{Phase: "build", Package: pkg.Name, Total: manifest.Summary.Foreign})
+		emit(options, Progress{Phase: "build", Package: pkg.Name, Source: "foreign", Total: manifest.Summary.Foreign})
 		directory := filepath.Join(buildRoot, pkg.Name)
 		if err := options.Run.Run("git", "clone", "--depth", "1", "https://aur.archlinux.org/"+pkg.Name+".git", directory); err != nil {
 			manifest.Exceptions = append(manifest.Exceptions, Exception{Package: pkg.Name, Code: "aur-clone-failed", Detail: err.Error()})
