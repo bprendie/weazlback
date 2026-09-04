@@ -138,6 +138,21 @@ func TestHelpExplainsEveryNavigationItem(t *testing.T) {
 	}
 }
 
+func TestFullSystemSnapshotIsPrimaryDedicatedMenuItem(t *testing.T) {
+	index := navigationIndex(modeSystemSnapshot)
+	if index != navigationIndex(modeBackup)+1 {
+		t.Fatalf("snapshot index=%d backup index=%d", index, navigationIndex(modeBackup))
+	}
+	entry := navigation[index]
+	if entry.key != "y" || entry.label != "Full System Snapshot" {
+		t.Fatalf("entry=%+v", entry)
+	}
+	m := Model{styles: newStyles(), width: 80, height: 24, mode: modeHome, index: 0, railFocused: true, cfg: config.Default()}
+	if view := m.View(); !strings.Contains(view, "y System set") {
+		t.Fatalf("primary item hidden at 80x24:\n%s", view)
+	}
+}
+
 func TestNarrowRailAppearsWhenFocused(t *testing.T) {
 	m := Model{styles: newStyles(), mode: modeHome, railFocused: true}
 	view := m.content(60, 18)

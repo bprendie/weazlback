@@ -21,7 +21,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.backupMode, m.backupIndex, m.backupRailFocused = m.mode, m.index, m.railFocused
-		m.workspace, m.mode, m.index, m.restoreStage, m.railFocused = "restore", modeRestore, 3, "dashboard", false
+		m.workspace, m.mode, m.index, m.restoreStage, m.railFocused = "restore", modeRestore, navigationIndex(modeRestore), "dashboard", false
 		m.status = "Restore Mode"
 		return m, nil
 	}

@@ -63,7 +63,11 @@ func (m Model) sidebar(width int) string {
 		}
 		b.WriteString(prefix + m.styles.help.Render(entry.key) + " " + style.Render(label) + "\n")
 	}
-	b.WriteString("\n" + lipgloss.NewStyle().Foreground(warning).Bold(true).Render("REPOSITORY"))
+	separator := "\n"
+	if m.height <= 24 {
+		separator = ""
+	}
+	b.WriteString(separator + lipgloss.NewStyle().Foreground(warning).Bold(true).Render("REPOSITORY"))
 	repository := "not initialized"
 	if active := m.cfg.Active(); active != nil {
 		repository = active.Name
@@ -152,7 +156,7 @@ func (m Model) screen() string {
 		return m.nukeScreen()
 	}
 	if m.mode == modeSystemSnapshot {
-		body := m.styles.header.Render("SYSTEM SNAPSHOT") + "\n\n"
+		body := m.styles.header.Render("FULL SYSTEM SNAPSHOT") + "\n\n"
 		body += "One dated recovery generation binds Package Capsule, Core, Home, and Heavy.\nIncomplete generations remain retryable and are never selected automatically.\n\n"
 		body += "[enter] Create complete generation\n[r] Retry latest incomplete\n[l] List generations\n[v] Quick cryptographic verify\n[s] Preview failed/incomplete scrub"
 		if m.busy {

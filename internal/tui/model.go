@@ -49,13 +49,22 @@ type restoreBasketItem struct {
 
 var navigation = []navEntry{
 	{"h", "Home", modeHome}, {"b", "Backup now", modeBackup},
+	{"y", "Full System Snapshot", modeSystemSnapshot},
 	{"s", "Restore Points", modeSnapshots}, {"r", "Restore", modeRestore},
 	{"p", "Profiles", modeProfiles}, {"d", "Destinations", modeDestinations},
 	{"k", "Recovery kit", modeRecovery}, {"c", "Check repository", modeCheck},
 	{"u", "Tune", modeTune},
 	{"t", "Schedule", modeSchedule},
 	{"x", "Nuke repository", modeNuke},
-	{"y", "System Snapshot", modeSystemSnapshot},
+}
+
+func navigationIndex(wanted mode) int {
+	for index, entry := range navigation {
+		if entry.mode == wanted {
+			return index
+		}
+	}
+	return 0
 }
 
 type Model struct {
@@ -170,11 +179,11 @@ func New() Model {
 		restoreConflict: restoretxn.ReplacePreserving, restoreTargetMode: "original"}
 	switch os.Getenv("WEAZLBACK_START_MODE") {
 	case "backup":
-		m.mode, m.index = modeBackup, 1
+		m.mode, m.index = modeBackup, navigationIndex(modeBackup)
 	case "restore":
-		m.mode, m.index, m.workspace, m.restoreStage = modeRestore, 3, "restore", "dashboard"
+		m.mode, m.index, m.workspace, m.restoreStage = modeRestore, navigationIndex(modeRestore), "restore", "dashboard"
 	case "check":
-		m.mode, m.index = modeCheck, 7
+		m.mode, m.index = modeCheck, navigationIndex(modeCheck)
 	}
 	path, err := config.Path()
 	if err != nil {

@@ -23,7 +23,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "unlock the vault to enter Restore Mode"
 		} else {
 			m.backupMode, m.backupIndex, m.backupRailFocused = m.mode, m.index, m.railFocused
-			m.workspace, m.mode, m.index, m.restoreStage, m.railFocused = "restore", modeRestore, 3, "dashboard", false
+			m.workspace, m.mode, m.index, m.restoreStage, m.railFocused = "restore", modeRestore, navigationIndex(modeRestore), "dashboard", false
 			m.status = "Restore Mode"
 		}
 		return m, waitRestoreSignal()
