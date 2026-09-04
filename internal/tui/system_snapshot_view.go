@@ -4,7 +4,44 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/bprendie/weazlback/internal/generation"
 )
+
+func systemSnapshotSetList(sets []generation.Generation, height int) string {
+	limit := 8
+	if height > 0 && height < 30 {
+		limit = 4
+	}
+	lines := []string{"RECOVERY GENERATIONS"}
+	for index, set := range sets {
+		if index >= limit {
+			lines = append(lines, fmt.Sprintf("… %d older", len(sets)-limit))
+			break
+		}
+		state := "INCOMPLETE"
+		switch {
+		case set.Abandoned:
+			state = "ABANDONED"
+		case set.Failed:
+			state = "FAILED / RETRYABLE"
+		case set.Complete:
+			state = "COMPLETE"
+		}
+		lines = append(lines, fmt.Sprintf("%s  %-18s  %d/4 lanes", set.StartedAt.Local().Format("2006-01-02 15:04"), state, generationLaneCount(set)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func generationLaneCount(set generation.Generation) int {
+	count := 0
+	for _, profile := range generation.RequiredProfiles {
+		if _, ok := set.Members[profile]; ok {
+			count++
+		}
+	}
+	return count
+}
 
 func (m Model) systemSnapshotScreen() string {
 	lines := []string{m.styles.header.Render("FULL SYSTEM SNAPSHOT"), ""}

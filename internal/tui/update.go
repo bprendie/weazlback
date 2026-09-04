@@ -89,6 +89,14 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.systemSnapshotLanes[msg.lane] = msg.progress
 		m.status = "System Snapshot running"
 		return m, waitSystemSnapshotEvent(msg.events)
+	case systemSnapshotListMsg:
+		m.busy = false
+		if msg.err != nil {
+			m.err, m.status = msg.err.Error(), "System Snapshot list failed"
+		} else {
+			m.systemSnapshotSets, m.err, m.status = msg.sets, "", "System Snapshot generations loaded"
+		}
+		return m, nil
 	case packageSudoDoneMsg:
 		if msg.err != nil {
 			m.packageStage, m.err, m.status = "", msg.err.Error(), "package authorization failed"

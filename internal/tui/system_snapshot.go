@@ -2,14 +2,22 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/bprendie/weazlback/internal/generation"
+	"github.com/bprendie/weazlback/internal/restic"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+type systemSnapshotListMsg struct {
+	sets []generation.Generation
+	err  error
+}
 
 func (m Model) runSystemSnapshotAction(action string) (tea.Model, tea.Cmd) {
 	if m.busy {
@@ -21,6 +29,19 @@ func (m Model) runSystemSnapshotAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.authorizeSystemSnapshot(action)
+	}
+	if action == "list" {
+		_, _, repo, err := m.activeRuntime("")
+		if err != nil {
+			m.err = err.Error()
+			return m, nil
+		}
+		machineID := m.cfg.Machine.ID
+		m.busy, m.operation, m.err = true, "System Snapshot list", ""
+		return m, func() tea.Msg {
+			points, listErr := restic.NewService(io.Discard).SnapshotsForMachine(context.Background(), repo, machineID)
+			return systemSnapshotListMsg{sets: generation.Catalog(points), err: listErr}
+		}
 	}
 	executable, err := os.Executable()
 	if err != nil {

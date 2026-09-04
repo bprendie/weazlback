@@ -160,6 +160,9 @@ func (m Model) screen() string {
 			return m.systemSnapshotScreen()
 		}
 		body := m.styles.header.Render("FULL SYSTEM SNAPSHOT") + "\n\n"
+		if len(m.systemSnapshotSets) > 0 {
+			body += systemSnapshotSetList(m.systemSnapshotSets, m.height) + "\n\n"
+		}
 		body += "One dated recovery generation binds Package Capsule, Core, Home, and Heavy.\nIncomplete generations remain retryable and are never selected automatically.\n\n"
 		body += "[enter] Create complete generation\n[r] Retry latest incomplete\n[l] List generations\n[v] Quick cryptographic verify\n[s] Preview failed/incomplete scrub"
 		if m.busy {

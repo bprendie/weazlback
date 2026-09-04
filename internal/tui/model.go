@@ -10,6 +10,7 @@ import (
 	"github.com/bprendie/weazlback/internal/catalog"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/freshrestore"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/heavy"
 	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/packagecapsule"
@@ -89,6 +90,7 @@ type Model struct {
 	operation            string
 	systemSnapshotLanes  map[string]systemSnapshotLane
 	systemSnapshotStart  time.Time
+	systemSnapshotSets   []generation.Generation
 	progress             restic.BackupProgress
 	snapshots            []restic.Snapshot
 	cancel               context.CancelFunc

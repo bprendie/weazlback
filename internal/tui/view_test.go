@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/config"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/restic"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -163,5 +164,18 @@ func TestSystemSnapshotShowsFiveLiveLanesAtEightyByTwentyFour(t *testing.T) {
 	}
 	if lipgloss.Height(view) > 24 || lipgloss.Width(view) > 80 {
 		t.Fatalf("80x24 snapshot rendered %dx%d", lipgloss.Width(view), lipgloss.Height(view))
+	}
+}
+
+func TestSystemSnapshotListStaysInsideUnlockedTUI(t *testing.T) {
+	set := generation.Generation{StartedAt: time.Date(2026, 9, 4, 10, 43, 0, 0, time.Local), Complete: true, Members: map[string]restic.Snapshot{}}
+	for _, profile := range generation.RequiredProfiles {
+		set.Members[profile] = restic.Snapshot{Tags: []string{"profile:" + profile}}
+	}
+	m := Model{styles: newStyles(), mode: modeSystemSnapshot, height: 40}
+	updated, _ := m.Update(systemSnapshotListMsg{sets: []generation.Generation{set}})
+	view := updated.(Model).screen()
+	if !strings.Contains(view, "2026-09-04 10:43") || !strings.Contains(view, "COMPLETE") || !strings.Contains(view, "4/4 lanes") {
+		t.Fatalf("generation list missing recovery evidence: %q", view)
 	}
 }
