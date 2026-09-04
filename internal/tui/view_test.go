@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -177,5 +179,24 @@ func TestSystemSnapshotListStaysInsideUnlockedTUI(t *testing.T) {
 	view := updated.(Model).screen()
 	if !strings.Contains(view, "2026-09-04 10:43") || !strings.Contains(view, "COMPLETE") || !strings.Contains(view, "4/4 lanes") {
 		t.Fatalf("generation list missing recovery evidence: %q", view)
+	}
+}
+
+func TestSystemSnapshotDetectsUnreadableLocalRepositoryMetadata(t *testing.T) {
+	repository := t.TempDir()
+	for _, name := range []string{"index", "snapshots"} {
+		if err := os.Mkdir(filepath.Join(repository, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	blocked := filepath.Join(repository, "index", "root-owned")
+	if err := os.WriteFile(blocked, []byte("index"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if !localRepositoryNeedsElevation(config.Destination{Kind: "local", Repository: repository}) {
+		t.Fatal("unreadable local repository metadata did not trigger authorization")
+	}
+	if localRepositoryNeedsElevation(config.Destination{Kind: "ssh", Repository: repository}) {
+		t.Fatal("SSH destination requested local ownership authorization")
 	}
 }

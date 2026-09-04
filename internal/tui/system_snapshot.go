@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/restic"
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,7 +33,7 @@ func (m Model) runSystemSnapshotAction(action string) (tea.Model, tea.Cmd) {
 		return m.authorizeSystemSnapshot(action)
 	}
 	if action == "list" {
-		if active := m.cfg.Active(); active != nil && active.Privileged {
+		if active := m.cfg.Active(); active != nil && (active.Privileged || localRepositoryNeedsElevation(*active)) {
 			return m.authorizeSystemSnapshot("list")
 		}
 		return m.beginSystemSnapshotList()
@@ -56,6 +58,30 @@ func (m Model) runSystemSnapshotAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return operationDoneMsg{err: err}
 	})
+}
+
+func localRepositoryNeedsElevation(destination config.Destination) bool {
+	if destination.Kind != "local" {
+		return false
+	}
+	for _, name := range []string{"index", "snapshots"} {
+		entries, err := os.ReadDir(filepath.Join(destination.Repository, name))
+		if err != nil {
+			return os.IsPermission(err)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			file, openErr := os.Open(filepath.Join(destination.Repository, name, entry.Name()))
+			if openErr != nil {
+				return os.IsPermission(openErr)
+			}
+			file.Close()
+			break
+		}
+	}
+	return false
 }
 
 func (m Model) beginSystemSnapshotList() (tea.Model, tea.Cmd) {

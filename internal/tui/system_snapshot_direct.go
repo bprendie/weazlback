@@ -24,8 +24,9 @@ type systemSnapshotSudoMsg struct {
 	err    error
 }
 type systemSnapshotDoneMsg struct {
-	id  string
-	err error
+	id         string
+	privileged bool
+	err        error
 }
 type systemSnapshotLane struct {
 	State, Current        string
@@ -80,7 +81,18 @@ func (m Model) beginDirectSystemSnapshot(action string) (tea.Model, tea.Cmd) {
 		if runErr == nil {
 			runErr = auditErr
 		}
-		sendSystemSnapshotEvent(events, systemSnapshotDoneMsg{id: id, err: runErr})
+		privileged := destination.Kind == "local" && repo.Elevated
+		if privileged {
+			for index := range cfg.Destinations {
+				if cfg.Destinations[index].ID == destination.ID {
+					cfg.Destinations[index].Privileged = true
+				}
+			}
+			if path, pathErr := config.Path(); runErr == nil && pathErr == nil {
+				runErr = config.Save(path, cfg)
+			}
+		}
+		sendSystemSnapshotEvent(events, systemSnapshotDoneMsg{id: id, privileged: privileged, err: runErr})
 		close(events)
 	}()
 	return m, waitSystemSnapshotEvent(events)

@@ -82,6 +82,11 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m.beginDirectSystemSnapshot(msg.action)
 	case systemSnapshotDoneMsg:
 		m.busy, m.cancel = false, nil
+		if msg.privileged {
+			if active := m.cfg.Active(); active != nil {
+				active.Privileged = true
+			}
+		}
 		if msg.err != nil {
 			m.err, m.status = msg.err.Error(), "System Snapshot incomplete — press r to retry"
 		} else {
