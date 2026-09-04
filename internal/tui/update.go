@@ -71,6 +71,20 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitOperation(msg.events)
 	case operationDoneMsg:
 		return m.operationFinished(msg)
+	case systemSnapshotSudoMsg:
+		if msg.err != nil {
+			m.busy, m.err, m.status = false, msg.err.Error(), "System Snapshot authorization failed"
+			return m, nil
+		}
+		return m.beginDirectSystemSnapshot(msg.action)
+	case systemSnapshotDoneMsg:
+		m.busy, m.cancel = false, nil
+		if msg.err != nil {
+			m.err, m.status = msg.err.Error(), "System Snapshot incomplete — press r to retry"
+		} else {
+			m.err, m.status = "", "System Snapshot "+msg.id+" complete"
+		}
+		return m, nil
 	case packageSudoDoneMsg:
 		if msg.err != nil {
 			m.packageStage, m.err, m.status = "", msg.err.Error(), "package authorization failed"
