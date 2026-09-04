@@ -8,6 +8,7 @@ import (
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/freshrestore"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/restoretxn"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -195,8 +196,21 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.stage = "identity-choice"
 		}
 	case pointsMsg:
+		if m.pointIntent == "system-set" && msg.err == nil {
+			complete := msg.points[:0]
+			for _, point := range msg.points {
+				if generation.Has(point.Tags, generation.TagComplete) {
+					complete = append(complete, point)
+				}
+			}
+			msg.points = complete
+		}
 		if msg.err != nil || len(msg.points) == 0 {
-			m.err, m.stage = errorString(msg.err, "source identity has no Restore Points"), "action-choice"
+			fallback := "source identity has no Restore Points"
+			if m.pointIntent == "system-set" {
+				fallback = "source identity has no complete System Sets"
+			}
+			m.err, m.stage = errorString(msg.err, fallback), "action-choice"
 			return m, nil
 		}
 		m.points, m.pointIndex = msg.points, 0

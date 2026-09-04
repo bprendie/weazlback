@@ -78,11 +78,18 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if key == "down" || key == "j" {
 			m.pointIndex = min(len(m.points)-1, m.pointIndex+1)
 		} else if key == "enter" {
-			m.stage = "action-choice"
+			if m.pointIntent == "system-set" {
+				m.scope, m.stage = "everything", "hostname-choice"
+			} else {
+				m.stage = "action-choice"
+			}
 		}
 		return m, nil
 	case "action-choice":
 		switch key {
+		case "s":
+			m.stage, m.pointIntent = "system-set-loading", "system-set"
+			return m, m.loadPoints("core")
 		case "c":
 			m.scope, m.stage = "core", "hostname-choice"
 		case "h", "enter":
@@ -103,6 +110,9 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "scope-choice":
 		if key == "a" {
 			m.adoptIdentity = !m.adoptIdentity
+		} else if key == "s" {
+			m.stage, m.pointIntent = "system-set-loading", "system-set"
+			return m, m.loadPoints("core")
 		} else if key == "enter" || key == "h" {
 			m.scope, m.stage = "core-home", "hostname-choice"
 		} else if key == "c" {

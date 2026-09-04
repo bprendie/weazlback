@@ -48,7 +48,7 @@ func (m Model) body() string {
 		if m.adoptIdentity {
 			adoption = "ON — this replacement continues the source identity"
 		}
-		return "RECOVERY SCOPE\n\n[c] Core — System personality\n[h / enter] Core + Home — Personality and personal data\n[e] Everything — Full configured recovery\n\n[a] Replacement identity: " + adoption
+		return "RECOVERY SCOPE\n\n[s] System Set — Exact complete Package + Core + Home + Heavy generation\n[c] Core — System personality\n[h / enter] Core + Home — Personality and personal data\n[e] Everything — Nearest compatible Restore Points\n\n[a] Replacement identity: " + adoption
 	case "target-identity":
 		return "TARGET MACHINE IDENTITY\n\n[c / enter] Keep this installation's identity\n[n] Generate a new independent machine identity\n[a] Replacement hardware — explicitly adopt the selected source identity\n\nHostname is selected separately on the next screen."
 	case "action-choice":
@@ -56,13 +56,15 @@ func (m Model) body() string {
 		if m.catalogPath != "" {
 			catalogState = "encrypted catalog ready at " + m.catalogPath
 		}
-		return "RECOVERY WORKSPACE\n\n[c] Core — System personality\n[h / enter] Core + Home — Personality and personal data\n[e] Everything — Full configured recovery\n\nTOOLS\n[a] Applications only\n[f] Select one file or directory\n[i] Build optional encrypted history catalog\n\nSource identity  " + m.machineID + "\nTarget identity  " + targetIdentityText(m) + "\nCatalog          " + catalogState
+		return "RECOVERY WORKSPACE\n\n[s] System Set — Exact complete Package + Core + Home + Heavy generation\n[c] Core — System personality\n[h / enter] Core + Home — Personality and personal data\n[e] Everything — Nearest compatible Restore Points\n\nTOOLS\n[a] Applications only\n[f] Select one file or directory\n[i] Build optional encrypted history catalog\n\nSource identity  " + m.machineID + "\nTarget identity  " + targetIdentityText(m) + "\nCatalog          " + catalogState
 	case "destination-loading":
 		return "◉ Unlocking recovery kit and reading destinations…"
 	case "identity-loading":
 		return "◉ Reading encrypted machine histories…"
 	case "selective-points":
 		return "◉ Reading source Restore Points…"
+	case "system-set-loading":
+		return "◉ Reading complete atomic System Sets…"
 	case "point-choice":
 		return m.pointChoiceView()
 	case "selective-loading":
@@ -144,6 +146,9 @@ func (m Model) pointChoiceView() string {
 			marker = "  COMPLETE SYSTEM SNAPSHOT"
 		}
 		lines = append(lines, fmt.Sprintf("%s%s  %-8s%s", cursor, point.Time.Local().Format("2006-01-02 15:04"), profile(point.Tags), marker))
+	}
+	if m.pointIntent == "system-set" {
+		return "CHOOSE SYSTEM SET\n\n" + strings.Join(lines, "\n") + "\n\nEvery lane comes from this exact complete generation.\n↑/↓ select • enter recover set"
 	}
 	return "CHOOSE RESTORE POINT\n\n" + strings.Join(lines, "\n") + "\n\nHome and Heavy resolve to their nearest healthy points, disclosed in the final plan.\n↑/↓ select • enter continue"
 }

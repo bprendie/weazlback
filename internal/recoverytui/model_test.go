@@ -8,6 +8,7 @@ import (
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/freshrestore"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/packagecapsule"
 	"github.com/bprendie/weazlback/internal/restic"
@@ -22,13 +23,35 @@ func TestGuidedRecoveryDefaultsToCoreHomeScope(t *testing.T) {
 	}
 	m.stage = "scope-choice"
 	view := m.View()
-	for _, wanted := range []string{"Core —", "Core + Home", "Everything"} {
+	for _, wanted := range []string{"System Set", "Core —", "Core + Home", "Everything"} {
 		if !strings.Contains(view, wanted) {
 			t.Fatalf("scope view missing %q: %s", wanted, view)
 		}
 	}
-	if !strings.Contains(view, "Everything") || !strings.Contains(view, "Full configured") {
+	if !strings.Contains(view, "Everything") || !strings.Contains(view, "Nearest") || !strings.Contains(view, "compatible Restore Points") {
 		t.Fatalf("Everything scope is ambiguous: %s", view)
+	}
+}
+
+func TestSystemSetPickerOnlyShowsCompleteAtomicGenerations(t *testing.T) {
+	m := New()
+	m.stage, m.pointIntent = "system-set-loading", "system-set"
+	updated, _ := m.Update(pointsMsg{points: []restic.Snapshot{
+		{ID: "complete", Time: time.Unix(200, 0), Tags: []string{"profile:core", "generation:one", generation.TagComplete}},
+		{ID: "loose", Time: time.Unix(300, 0), Tags: []string{"profile:core"}},
+		{ID: "failed", Time: time.Unix(400, 0), Tags: []string{"profile:core", "generation:two", generation.TagFailed}},
+	}})
+	m = updated.(Model)
+	if m.stage != "point-choice" || len(m.points) != 1 || m.points[0].ID != "complete" {
+		t.Fatalf("stage=%q points=%+v", m.stage, m.points)
+	}
+	if view := m.body(); !strings.Contains(view, "CHOOSE SYSTEM SET") || !strings.Contains(view, "Every lane comes from this exact complete generation") {
+		t.Fatalf("view=%q", view)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.scope != "everything" || m.stage != "hostname-choice" {
+		t.Fatalf("scope=%q stage=%q", m.scope, m.stage)
 	}
 }
 
@@ -191,7 +214,7 @@ func TestRecoveryWorkspaceSeparatesSourceTargetIdentityAndActions(t *testing.T) 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	view := m.View()
-	for _, value := range []string{"Core", "Personality and personal data", "Everything", "Applications only", "Select one file"} {
+	for _, value := range []string{"System Set", "Core", "Personality and personal data", "Everything", "Applications only", "Select one file"} {
 		if !strings.Contains(view, value) {
 			t.Fatalf("action workspace missing %q", value)
 		}
