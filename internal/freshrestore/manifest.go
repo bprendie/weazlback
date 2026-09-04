@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/backupmeta"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/inventory"
 	"github.com/bprendie/weazlback/internal/restic"
 )
@@ -68,6 +69,23 @@ func selectCoreSnapshot(snapshots []restic.Snapshot, selected string) (restic.Sn
 		}
 	}
 	return restic.Snapshot{}, errors.New("no matching healthy Core Restore Point found")
+}
+
+func selectRecoveryGeneration(snapshots []restic.Snapshot, selected, machineID string) (generation.Generation, bool) {
+	gens := generation.Catalog(snapshots)
+	if selected == "" || selected == "latest" {
+		return generation.LatestComplete(gens, machineID)
+	}
+	for _, g := range gens {
+		if !g.Complete || g.MachineID != machineID {
+			continue
+		}
+		core := g.Members["core"]
+		if selected == g.ID || selected == core.ID || selected == core.ShortID {
+			return g, true
+		}
+	}
+	return generation.Generation{}, false
 }
 
 func selectProfileSnapshotAt(snapshots []restic.Snapshot, profile string, requested time.Time) (restic.Snapshot, error) {

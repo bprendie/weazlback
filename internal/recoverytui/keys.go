@@ -45,15 +45,9 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.loadDestinations()
 		}
 	case "destination-choice":
-		if key == "up" || key == "k" {
-			m.destinationIndex = max(0, m.destinationIndex-1)
-		} else if key == "down" || key == "j" {
-			m.destinationIndex = min(len(m.destinations)-1, m.destinationIndex+1)
-		} else if key == "enter" && len(m.destinations) > 0 {
-			m.destination, m.stage = m.destinations[m.destinationIndex].ID, "identity-loading"
-			return m, m.loadIdentities()
-		}
-		return m, nil
+		return m.updateDestinationChoiceKey(key)
+	case "destination-warning":
+		return m.updateDestinationWarningKey(key)
 	case "identity-choice":
 		if key == "up" || key == "k" {
 			m.identityIndex = max(0, m.identityIndex-1)

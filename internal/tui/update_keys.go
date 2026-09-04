@@ -77,6 +77,18 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.togglePackageSchedule()
 		}
 	}
+	if m.mode == modeSystemSnapshot && !m.railFocused {
+		switch msg.String() {
+		case "r":
+			return m.runSystemSnapshotAction("retry")
+		case "l":
+			return m.runSystemSnapshotAction("list")
+		case "v":
+			return m.runSystemSnapshotAction("verify")
+		case "s":
+			return m.runSystemSnapshotAction("scrub")
+		}
+	}
 	if msg.String() == "tab" || msg.String() == "shift+tab" {
 		m.railFocused = msg.String() == "tab" && !m.railFocused
 		if m.railFocused {
@@ -245,6 +257,8 @@ func (m Model) activate() (tea.Model, tea.Cmd) {
 		return m.startCheck()
 	case modeTune:
 		return m.startTune()
+	case modeSystemSnapshot:
+		return m.runSystemSnapshotAction("create")
 	}
 	return m, nil
 }

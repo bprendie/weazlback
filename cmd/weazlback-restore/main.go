@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bprendie/weazlback/internal/buildinfo"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/freshrestore"
 	"github.com/bprendie/weazlback/internal/recovery"
@@ -20,6 +21,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		fmt.Println(buildinfo.Version)
+		return
+	}
 	if len(os.Args) == 3 && os.Args[1] == "--internal-set-hostname" {
 		if err := freshrestore.SetHostnamePrivileged(os.Args[2]); err != nil {
 			fatal(err)

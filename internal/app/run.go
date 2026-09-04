@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/benchmark"
+	"github.com/bprendie/weazlback/internal/buildinfo"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/heavy"
 	"github.com/bprendie/weazlback/internal/inventory"
@@ -20,7 +21,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const Version = "1.1.0-dev"
+const Version = buildinfo.Version
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
@@ -48,6 +49,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return applicationsCommand(ctx, args[1:], stdout, stderr)
 	case "packages":
 		return packagesCommand(ctx, args[1:], stdout, stderr)
+	case "system":
+		if len(args) < 2 || args[1] != "snapshot" {
+			return errors.New("usage: weazlback system snapshot [create|retry|list|verify|scrub]")
+		}
+		return systemSnapshotCommand(ctx, args[2:], stdout, stderr)
 	case "benchmark":
 		return benchmarkCommand(ctx, args[1:], stdout, stderr)
 	case "browser":
@@ -245,6 +251,7 @@ weazlback rotate repository-key                 rotate repository encryption key
   weazlback applications [--output P] capture application restore manifest
   weazlback packages refresh [options] capture encrypted package artifacts
   weazlback packages schedule --days N configure independent refresh reminders
+  weazlback system snapshot [create|retry|list|verify|scrub] manage complete recovery generations
   weazlback browser repair [--apply] inspect or clear validated stale browser locks
   weazlback benchmark --engine E [--fixture F] [--work-dir D] [--output P]
 	[--repository URL --ssh-key KEY --known-hosts FILE]

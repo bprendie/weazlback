@@ -3,15 +3,19 @@ package freshrestore
 import "fmt"
 
 func PlanText(plan Plan) string {
-	points := fmt.Sprintf("Core           %s  %s", plan.Snapshot.ShortID, plan.Snapshot.Time.Local().Format("2006-01-02 15:04"))
+	generationText := ""
+	if plan.GenerationID != "" {
+		generationText = "\nSystem set     " + plan.GenerationID + "  COMPLETE"
+	}
+	points := fmt.Sprintf("Core           %s", plan.Snapshot.Time.Local().Format("2006-01-02 15:04"))
 	if plan.HomeSnapshot != nil {
-		points += fmt.Sprintf("\nHome           %s  %s", plan.HomeSnapshot.ShortID, plan.HomeSnapshot.Time.Local().Format("2006-01-02 15:04"))
+		points += fmt.Sprintf("\nHome           %s", plan.HomeSnapshot.Time.Local().Format("2006-01-02 15:04"))
 	}
 	if plan.HeavySnapshot != nil {
-		points += fmt.Sprintf("\nHeavy          %s  %s", plan.HeavySnapshot.ShortID, plan.HeavySnapshot.Time.Local().Format("2006-01-02 15:04"))
+		points += fmt.Sprintf("\nHeavy          %s", plan.HeavySnapshot.Time.Local().Format("2006-01-02 15:04"))
 	}
 	if plan.PackageSnapshot != nil {
-		points += fmt.Sprintf("\nPackages       %s  %s", plan.PackageSnapshot.ShortID, plan.PackageSnapshot.Time.Local().Format("2006-01-02 15:04"))
+		points += fmt.Sprintf("\nPackages       %s", plan.PackageSnapshot.Time.Local().Format("2006-01-02 15:04"))
 	}
 	identity := "preserve target identity"
 	if plan.AdoptSourceIdentity {
@@ -21,8 +25,8 @@ func PlanText(plan Plan) string {
 	if plan.ScopeDecision.Warning != "" {
 		warning = "\n\nWARNING\n" + plan.ScopeDecision.Warning
 	}
-	return fmt.Sprintf("Recovery scope %s\nIncludes       %s\n%s\nHostname       %s\nMachine        %s\nHome mapping   %s -> %s\nOwnership      %d:%d -> %d:%d\nPackage delta  %d local / %d official online / %d foreign online / %d kept\nFlatpaks       %d\nServices       %d system / %d user%s",
-		plan.Scope, recoveryScopeContents(plan.Scope), points, plan.Hostname, identity, plan.OriginalHome, plan.TargetHome, plan.SourceUID, plan.SourceGID, plan.TargetUID, plan.TargetGID,
+	return fmt.Sprintf("Recovery scope %s\nIncludes       %s%s\n%s\nHostname       %s\nMachine        %s\nHome mapping   %s -> %s\nOwnership      %d:%d -> %d:%d\nPackage delta  %d local / %d official online / %d foreign online / %d kept\nFlatpaks       %d\nServices       %d system / %d user%s",
+		plan.Scope, recoveryScopeContents(plan.Scope), generationText, points, plan.Hostname, identity, plan.OriginalHome, plan.TargetHome, plan.SourceUID, plan.SourceGID, plan.TargetUID, plan.TargetGID,
 		len(plan.PackageDelta.Local), len(plan.Official), len(plan.AUR), len(plan.PackageDelta.Kept), len(plan.Flatpak), len(plan.SystemServices), len(plan.UserServices), warning)
 }
 

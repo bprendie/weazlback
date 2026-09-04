@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/freshrestore"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/restoretxn"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -18,7 +19,8 @@ func (m Model) View() string {
 		width = 92
 	}
 	help := lipgloss.NewStyle().Foreground(dim).Render("enter continue  •  ctrl+c quit")
-	return panel.Width(width).Render(title + "\n\n" + m.body() + "\n\n" + help)
+	version := lipgloss.NewStyle().Foreground(dim).Render("recovery binary " + m.mediaVersion + " — shown before vault unlock")
+	return panel.Width(width).Render(title + "\n" + version + "\n\n" + m.body() + "\n\n" + help)
 }
 
 func (m Model) body() string {
@@ -77,6 +79,10 @@ func (m Model) body() string {
 		return fmt.Sprintf("SELECTIVE RESTORE RESULT\n\nPlaced       %d\nRollback     %d\nStaging      %s\nJournal      %s", len(m.selectiveResult.Placed), len(m.selectiveResult.Rollback), m.selectiveResult.StagedAt, m.selectiveResult.JournalPath) + errorText(m.err)
 	case "destination-choice":
 		return m.destinationView()
+	case "destination-warning":
+		chosen := m.destinationSummaries[m.destination]
+		newest := m.destinationSummaries[m.destinations[0].ID]
+		return fmt.Sprintf("OLDER RECOVERY SOURCE SELECTED\n\nChosen       %s\nNewer source %s  %s\n\n[enter] Continue with older source\n[esc] Return", recoveryDestinationTime(chosen).Local().Format("2006-01-02 15:04"), m.destinations[0].Name, recoveryDestinationTime(newest).Local().Format("2006-01-02 15:04"))
 	case "identity-choice":
 		return m.identityView()
 	case "loading":
@@ -130,7 +136,14 @@ func (m Model) pointChoiceView() string {
 		if index == m.pointIndex {
 			cursor = "> "
 		}
-		lines = append(lines, fmt.Sprintf("%s%s  %-8s  %s", cursor, point.Time.Local().Format("2006-01-02 15:04"), profile(point.Tags), point.ShortID))
+		marker := ""
+		if index == 0 {
+			marker = "  NEWEST"
+		}
+		if generation.Has(point.Tags, generation.TagComplete) {
+			marker = "  COMPLETE SYSTEM SNAPSHOT"
+		}
+		lines = append(lines, fmt.Sprintf("%s%s  %-8s%s", cursor, point.Time.Local().Format("2006-01-02 15:04"), profile(point.Tags), marker))
 	}
 	return "CHOOSE RESTORE POINT\n\n" + strings.Join(lines, "\n") + "\n\nHome and Heavy resolve to their nearest healthy points, disclosed in the final plan.\n↑/↓ select • enter continue"
 }
@@ -205,7 +218,11 @@ func (m Model) identityView() string {
 		if identity.Legacy {
 			legacy = "  LEGACY"
 		}
-		lines = append(lines, fmt.Sprintf("%s%-22s %-18s %4d points%s", cursor, truncate(identity.Name, 22), truncate(identity.Hostname, 18), identity.Points, legacy))
+		latest := "unknown"
+		if !identity.Latest.IsZero() {
+			latest = identity.Latest.Local().Format("2006-01-02 15:04")
+		}
+		lines = append(lines, fmt.Sprintf("%s%-22s %-18s %s  %4d points%s", cursor, truncate(identity.Name, 22), truncate(identity.Hostname, 18), latest, identity.Points, legacy))
 	}
 	return "CHOOSE SOURCE MACHINE\n\n" + strings.Join(lines, "\n") + "\n\n↑/↓ select  •  enter continue"
 }
@@ -221,9 +238,20 @@ func (m Model) destinationView() string {
 		if label == "" {
 			label = destination.ID
 		}
-		lines = append(lines, fmt.Sprintf("%s%-20s %-5s  %s", cursor, truncate(label, 20), strings.ToUpper(destination.Kind), truncate(destination.Repository, 38)))
+		summary := m.destinationSummaries[destination.ID]
+		date, marker := "no healthy pair", ""
+		if !summary.LatestComplete.IsZero() {
+			date, marker = summary.LatestComplete.Local().Format("2006-01-02 15:04"), "  LATEST COMPLETE"
+		}
+		if summary.LatestComplete.IsZero() && !summary.LatestCore.IsZero() {
+			date = "Core " + summary.LatestCore.Local().Format("2006-01-02 15:04")
+		}
+		if summary.Error != "" {
+			date = "unavailable"
+		}
+		lines = append(lines, fmt.Sprintf("%s%-20s %-5s  %s%s", cursor, truncate(label, 20), strings.ToUpper(destination.Kind), date, marker))
 	}
-	return "CHOOSE BACKUP DESTINATION\n\n" + strings.Join(lines, "\n") + "\n\n↑/↓ select  •  enter continue"
+	return "CHOOSE BACKUP DESTINATION\n\n" + strings.Join(lines, "\n") + errorText(m.err) + "\n\nNewest recoverable destination is selected.\n↑/↓ select  •  enter continue"
 }
 
 func truncate(value string, width int) string {

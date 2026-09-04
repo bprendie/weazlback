@@ -99,7 +99,12 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		return nil, errors.New("legacy history must be adopted into a stable machine identity before replacement adoption")
 	}
 	snapshots = filtered
+	selectedGeneration, hasGeneration := selectRecoveryGeneration(snapshots, options.Snapshot, machineID)
 	snapshot, err := selectCoreSnapshot(snapshots, options.Snapshot)
+	if hasGeneration {
+		snapshot = selectedGeneration.Members["core"]
+		err = nil
+	}
 	if err != nil {
 		r.Close()
 		return nil, err
@@ -116,9 +121,18 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	r.Plan = Plan{Snapshot: snapshot, OriginalHome: originalHome, TargetHome: options.TargetHome, Scope: options.Scope,
 		SourceMachineID: machineID, TargetMachineID: targetMachineID, AdoptSourceIdentity: options.AdoptSourceIdentity,
 		PersistTargetIdentity: options.PersistTargetIdentity}
-	r.Plan.PackageSnapshot = selectLatestPackageSnapshot(snapshots)
+	if hasGeneration {
+		r.Plan.GenerationID, r.Plan.GenerationComplete = selectedGeneration.ID, selectedGeneration.Complete
+		packages := selectedGeneration.Members["packages"]
+		r.Plan.PackageSnapshot = &packages
+	} else {
+		r.Plan.PackageSnapshot = selectLatestPackageSnapshot(snapshots)
+	}
 	if options.Scope == "core-home" || options.Scope == "everything" {
 		home, selectErr := selectProfileSnapshotAt(snapshots, "home", snapshot.Time)
+		if hasGeneration {
+			home, selectErr = selectedGeneration.Members["home"], nil
+		}
 		if selectErr != nil {
 			r.Close()
 			return nil, selectErr
@@ -127,6 +141,9 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	}
 	if options.Scope == "everything" {
 		heavy, selectErr := selectProfileSnapshotAt(snapshots, "heavy", snapshot.Time)
+		if hasGeneration {
+			heavy, selectErr = selectedGeneration.Members["heavy"], nil
+		}
 		if selectErr != nil {
 			r.Close()
 			return nil, selectErr

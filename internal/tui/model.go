@@ -34,6 +34,7 @@ const (
 	modeTune
 	modeSchedule
 	modeNuke
+	modeSystemSnapshot
 )
 
 type navEntry struct {
@@ -54,6 +55,7 @@ var navigation = []navEntry{
 	{"u", "Tune", modeTune},
 	{"t", "Schedule", modeSchedule},
 	{"x", "Nuke repository", modeNuke},
+	{"y", "System Snapshot", modeSystemSnapshot},
 }
 
 type Model struct {

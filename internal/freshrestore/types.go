@@ -111,6 +111,8 @@ type Plan struct {
 	AdoptSourceIdentity   bool                           `json:"adopt_source_identity"`
 	PersistTargetIdentity bool                           `json:"persist_target_identity"`
 	Snapshot              restic.Snapshot                `json:"snapshot"`
+	GenerationID          string                         `json:"generation_id,omitempty"`
+	GenerationComplete    bool                           `json:"generation_complete,omitempty"`
 	HomeSnapshot          *restic.Snapshot               `json:"home_snapshot,omitempty"`
 	HeavySnapshot         *restic.Snapshot               `json:"heavy_snapshot,omitempty"`
 	PackageSnapshot       *restic.Snapshot               `json:"package_snapshot,omitempty"`

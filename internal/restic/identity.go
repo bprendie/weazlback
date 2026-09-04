@@ -3,6 +3,7 @@ package restic
 import (
 	"sort"
 	"strings"
+	"time"
 )
 
 func SnapshotHealth(tags []string) string {
@@ -25,6 +26,7 @@ type Identity struct {
 	Hostname string
 	Legacy   bool
 	Points   int
+	Latest   time.Time
 }
 
 func MachineID(tags []string) string {
@@ -66,10 +68,13 @@ func GroupIdentities(snapshots []Snapshot, currentID, currentName string) []Iden
 			if id == currentID && currentName != "" {
 				name = currentName
 			}
-			group = &Identity{ID: id, Name: name, Hostname: snapshot.Hostname, Legacy: legacy}
+			group = &Identity{ID: id, Name: name, Hostname: snapshot.Hostname, Legacy: legacy, Latest: snapshot.Time}
 			groups[id] = group
 		}
 		group.Points++
+		if snapshot.Time.After(group.Latest) {
+			group.Latest = snapshot.Time
+		}
 	}
 	result := make([]Identity, 0, len(groups))
 	for _, group := range groups {

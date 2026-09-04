@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/bprendie/weazlback/internal/config"
+	"github.com/bprendie/weazlback/internal/generation"
 	"github.com/bprendie/weazlback/internal/recovery"
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/bprendie/weazlback/internal/vault"
@@ -25,6 +28,15 @@ func OpenSessionAt(kit string, passphrase []byte, repository string) (*Session, 
 type RecoveryCatalog struct {
 	Active       string
 	Destinations []config.Destination
+	Summaries    map[string]DestinationRecoverySummary
+}
+
+type DestinationRecoverySummary struct {
+	LatestCore     time.Time
+	LatestHome     time.Time
+	LatestComplete time.Time
+	CompleteID     string
+	Error          string
 }
 
 func ReadRecoveryIdentities(ctx context.Context, kit string, passphrase []byte, destinationID string) ([]restic.Identity, error) {
@@ -53,7 +65,48 @@ func ReadRecoveryCatalog(kit string, passphrase []byte) (RecoveryCatalog, error)
 	if len(cfg.Destinations) == 0 {
 		return RecoveryCatalog{}, errors.New("recovery kit has no repository destination")
 	}
-	return RecoveryCatalog{Active: cfg.ActiveDestination, Destinations: append([]config.Destination(nil), cfg.Destinations...)}, nil
+	catalog := RecoveryCatalog{Active: cfg.ActiveDestination, Destinations: append([]config.Destination(nil), cfg.Destinations...), Summaries: map[string]DestinationRecoverySummary{}}
+	for _, destination := range cfg.Destinations {
+		session, openErr := OpenSessionDestinationAt(kit, passphrase, destination.ID, "")
+		if openErr != nil {
+			catalog.Summaries[destination.ID] = DestinationRecoverySummary{Error: openErr.Error()}
+			continue
+		}
+		probeCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		points, listErr := restic.NewService(io.Discard).Snapshots(probeCtx, session.Repository)
+		cancel()
+		session.Close()
+		if listErr != nil {
+			catalog.Summaries[destination.ID] = DestinationRecoverySummary{Error: listErr.Error()}
+			continue
+		}
+		summary := summarizeDestination(points, cfg.Machine.ID)
+		catalog.Summaries[destination.ID] = summary
+	}
+	return catalog, nil
+}
+
+func summarizeDestination(points []restic.Snapshot, machineID string) DestinationRecoverySummary {
+	var result DestinationRecoverySummary
+	for _, point := range restic.FilterIdentity(points, machineID) {
+		if restic.SnapshotHealth(point.Tags) != "healthy" {
+			continue
+		}
+		switch restic.Profile(point.Tags) {
+		case "core":
+			if point.Time.After(result.LatestCore) {
+				result.LatestCore = point.Time
+			}
+		case "home":
+			if point.Time.After(result.LatestHome) {
+				result.LatestHome = point.Time
+			}
+		}
+	}
+	if complete, ok := generation.LatestComplete(generation.Catalog(points), machineID); ok {
+		result.LatestComplete, result.CompleteID = complete.EndedAt, complete.ID
+	}
+	return result
 }
 
 func OpenSessionDestinationAt(kit string, passphrase []byte, destinationID, repository string) (*Session, error) {

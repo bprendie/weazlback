@@ -100,6 +100,24 @@ On fresh metal, recovery inventories packages already supplied by the current Om
 
 Package Capsule extraction and installation run beside filesystem recovery. Fresh System Recovery exposes separate lanes for **Filesystem**, **Package Capsule**, and **Applications** so a slow mirror or AUR fallback can't hide data progress.
 
+## System Snapshot: One Date, One Way Home
+
+Independent Restore Points are useful until disaster day turns them into a timestamp guessing game. **System Snapshot** forges one dated recovery generation binding Package Capsule, Core, Home, and Heavy to the same immutable generation ID. Fresh recovery selects the newest complete generation and shows human dates; repository hashes stay in diagnostics where they belong.
+
+If a lane eats pavement, the generation stays **INCOMPLETE**. Retry retains successful lanes and runs only what failed or never started. An incomplete generation is never selected automatically.
+
+```sh
+weazlback system snapshot create
+weazlback system snapshot retry
+weazlback system snapshot list
+weazlback system snapshot verify --level quick
+weazlback system snapshot verify --level sample --subset 5%
+weazlback system snapshot verify --level full
+weazlback system snapshot scrub                  # preview only
+```
+
+Quick verification authenticates repository structure and generation membership. Sample verification reads and authenticates the requested pack coverage. Full verification reads every encrypted data blob. Scrub only targets failed, incomplete, or explicitly abandoned generations; applying it requires the exact displayed `SCRUB <date/time>` phrase, checks the repository before and after, and prunes only chunks no healthy Restore Point still references.
+
 ### Turbo Recovery Foundation
 
 Fresh recovery records a private mode-0600 schema-v2 journal. Completion includes a per-filesystem `syncfs`; bytes merely accepted by Linux's page cache are not called durable.

@@ -3,7 +3,6 @@ package recoverytui
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -69,6 +68,7 @@ type Model struct {
 	kitIndex                  int
 	destination               string
 	destinations              []config.Destination
+	destinationSummaries      map[string]freshrestore.DestinationRecoverySummary
 	destinationIndex          int
 	identities                []restic.Identity
 	identityIndex             int
@@ -101,6 +101,7 @@ type Model struct {
 	engine                    string
 	turboBreakGlass           bool
 	turboFullLink             bool
+	mediaVersion              string
 }
 
 var (
@@ -120,36 +121,7 @@ func New() Model {
 	if len(kits) > 1 {
 		stage = "kit-choice"
 	}
-	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "core-home", engine: freshrestore.EngineStandard}
-}
-
-func defaultKit(kits []string) string {
-	if len(kits) > 0 {
-		return kits[0]
-	}
-	cwd, _ := os.Getwd()
-	return filepath.Join(cwd, "weazlback-recovery.wzrk")
-}
-
-func discoverKits() []string {
-	seen, result := map[string]bool{}, []string{}
-	add := func(pattern string) {
-		matches, _ := filepath.Glob(pattern)
-		for _, path := range matches {
-			absolute, _ := filepath.Abs(path)
-			if !seen[absolute] {
-				seen[absolute], result = true, append(result, absolute)
-			}
-		}
-	}
-	cwd, _ := os.Getwd()
-	executable, _ := os.Executable()
-	add(filepath.Join(filepath.Dir(executable), "*.wzrk"))
-	add(filepath.Join(cwd, "*.wzrk"))
-	add("/mnt/*.wzrk")
-	add("/mnt/*/*.wzrk")
-	sort.Strings(result)
-	return result
+	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "core-home", engine: freshrestore.EngineStandard, mediaVersion: recoveryMediaVersion()}
 }
 
 func (m Model) Init() tea.Cmd { return textinput.Blink }
@@ -194,12 +166,14 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.Focus()
 			return m, textinput.Blink
 		}
-		m.destinations = msg.catalog.Destinations
+		m.destinations = append([]config.Destination(nil), msg.catalog.Destinations...)
+		m.destinationSummaries = msg.catalog.Summaries
+		sort.SliceStable(m.destinations, func(i, j int) bool {
+			return recoveryDestinationTime(msg.catalog.Summaries[m.destinations[i].ID]).After(recoveryDestinationTime(msg.catalog.Summaries[m.destinations[j].ID]))
+		})
 		m.destinationIndex = 0
-		for i := range m.destinations {
-			if m.destinations[i].ID == msg.catalog.Active {
-				m.destinationIndex = i
-			}
+		if len(m.destinations) > 0 && m.destinations[0].ID != msg.catalog.Active {
+			m.err = "A newer recovery source exists; newest destination selected."
 		}
 		if len(m.destinations) == 1 {
 			m.destination, m.stage = m.destinations[0].ID, "identity-loading"
@@ -292,4 +266,14 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateKey(msg)
 	}
 	return m, nil
+}
+
+func recoveryDestinationTime(summary freshrestore.DestinationRecoverySummary) time.Time {
+	if !summary.LatestComplete.IsZero() {
+		return summary.LatestComplete
+	}
+	if summary.LatestCore.After(summary.LatestHome) {
+		return summary.LatestCore
+	}
+	return summary.LatestHome
 }

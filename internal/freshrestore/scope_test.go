@@ -19,6 +19,21 @@ func TestSelectProfileSnapshotChoosesNewestMatchingProfile(t *testing.T) {
 	}
 }
 
+func TestCompleteGenerationBindsExactLanesInsteadOfNearestPoints(t *testing.T) {
+	base := time.Unix(1000, 0)
+	points := []restic.Snapshot{
+		{ID: "newer-loose-home", Time: base.Add(time.Hour), Tags: []string{"profile:home", "machine:m"}},
+		{ID: "g-core", ShortID: "gc", Time: base, Tags: []string{"profile:core", "machine:m", "generation:set", "generation-complete"}},
+		{ID: "g-home", Time: base.Add(time.Minute), Tags: []string{"profile:home", "machine:m", "generation:set", "generation-complete"}},
+		{ID: "g-heavy", Time: base.Add(2 * time.Minute), Tags: []string{"profile:heavy", "machine:m", "generation:set", "generation-complete"}},
+		{ID: "g-packages", Time: base.Add(3 * time.Minute), Tags: []string{"profile:packages", "machine:m", "generation:set", "generation-complete"}},
+	}
+	g, ok := selectRecoveryGeneration(points, "latest", "m")
+	if !ok || g.ID != "set" || g.Members["home"].ID != "g-home" {
+		t.Fatalf("generation=%+v ok=%t", g, ok)
+	}
+}
+
 func TestTopLevelTargetsDeduplicatesHomeRoots(t *testing.T) {
 	files := []restic.FileEntry{
 		{Path: "/home/alice/Documents/one"},

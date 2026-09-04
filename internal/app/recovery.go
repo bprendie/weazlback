@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/recovery"
@@ -36,15 +37,16 @@ func recoveryRefresh(args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("recovery refresh", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	target := flags.String("target", "/mnt/WEAZLBACK-RECOVERY", "existing writable recovery-media directory")
+	binaryDir := flags.String("binary-dir", defaultBinaryDir(), "directory containing the matched installed binary pair")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	executable, err := os.Executable()
-	if err != nil {
+	executable := filepath.Join(*binaryDir, "weazlback")
+	if err := validateBinaryPair(executable, filepath.Join(*binaryDir, "weazlback-restore")); err != nil {
 		return err
 	}
 	resticPath, _ := exec.LookPath("restic")
-	err = recovery.RefreshMedia(*target, executable, filepath.Join(filepath.Dir(executable), "weazlback-restore"), resticPath)
+	err := recovery.RefreshMedia(*target, executable, filepath.Join(*binaryDir, "weazlback-restore"), resticPath, Version, *binaryDir)
 	if err == nil {
 		_, err = fmt.Fprintf(stdout, "recovery media binaries and checksums refreshed at %s\n", *target)
 	}
@@ -55,6 +57,7 @@ func recoveryPrepare(args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("recovery prepare", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	target := flags.String("target", "/mnt/WEAZLBACK-RECOVERY", "existing writable recovery-media directory")
+	binaryDir := flags.String("binary-dir", defaultBinaryDir(), "directory containing the matched installed binary pair")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -62,11 +65,10 @@ func recoveryPrepare(args []string, stdout, stderr io.Writer) error {
 	if err != nil || !info.IsDir() {
 		return errors.New("--target must be an existing directory; Weazlback never formats or mounts devices")
 	}
-	executable, err := os.Executable()
-	if err != nil {
+	executable, restoreBinary := filepath.Join(*binaryDir, "weazlback"), filepath.Join(*binaryDir, "weazlback-restore")
+	if err := validateBinaryPair(executable, restoreBinary); err != nil {
 		return err
 	}
-	restoreBinary := filepath.Join(filepath.Dir(executable), "weazlback-restore")
 	temporaryKit, err := os.CreateTemp(*target, ".weazlback-recovery-*.wzrk")
 	if err != nil {
 		return err
@@ -79,12 +81,33 @@ func recoveryPrepare(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if err := recovery.PrepareMedia(*target, recovery.MediaSources{
-		Weazlback: executable, Restore: restoreBinary, Kit: temporaryPath, Restic: toolPath("restic"),
+		Weazlback: executable, Restore: restoreBinary, Kit: temporaryPath, Restic: toolPath("restic"), Version: Version, Source: *binaryDir,
 	}); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(stdout, "recovery media prepared and verified at %s\nNO RECOVERY: losing the vault passphrase makes this media useless.\n", *target)
 	return err
+}
+
+func defaultBinaryDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "bin")
+}
+
+func validateBinaryPair(app, restore string) error {
+	for _, path := range []string{app, restore} {
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+			return fmt.Errorf("recovery binary pair is incomplete at %s", filepath.Dir(app))
+		}
+	}
+	for _, path := range []string{app, restore} {
+		output, err := exec.Command(path, "--version").Output()
+		if err != nil || strings.TrimSpace(string(output)) != Version {
+			return fmt.Errorf("recovery binary %s does not match running version %s", filepath.Base(path), Version)
+		}
+	}
+	return nil
 }
 
 func toolPath(name string) string {

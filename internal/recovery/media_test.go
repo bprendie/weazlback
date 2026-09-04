@@ -25,7 +25,7 @@ func TestPrepareMediaPreservesUnrelatedFiles(t *testing.T) {
 		return path
 	}
 	err := PrepareMedia(target, MediaSources{
-		Weazlback: source("app", "app"), Restore: source("restore", "restore"), Kit: source("kit", "kit"),
+		Weazlback: source("app", "app"), Restore: source("restore", "restore"), Kit: source("kit", "kit"), Version: "test-version", Source: "/test/bin",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -37,10 +37,14 @@ func TestPrepareMediaPreservesUnrelatedFiles(t *testing.T) {
 	if err != nil || !strings.Contains(string(checksums), "weazlback-recovery.wzrk") {
 		t.Fatalf("checksums=%q err=%v", checksums, err)
 	}
-	for _, name := range []string{"weazlback", "weazlback-restore", "weazlback-recovery.wzrk", "RESTORE.txt", "THIRD_PARTY_NOTICES.txt"} {
+	for _, name := range []string{"weazlback", "weazlback-restore", "weazlback-recovery.wzrk", "WEAZLBACK-VERSION.json", "RESTORE.txt", "THIRD_PARTY_NOTICES.txt"} {
 		if _, err := os.Stat(filepath.Join(target, name)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+	provenance, err := os.ReadFile(filepath.Join(target, "WEAZLBACK-VERSION.json"))
+	if err != nil || !strings.Contains(string(provenance), `"version": "test-version"`) || !strings.Contains(string(provenance), `"source": "/test/bin"`) {
+		t.Fatalf("provenance=%q err=%v", provenance, err)
 	}
 	for name, want := range map[string]os.FileMode{"weazlback": 0o755, "weazlback-restore": 0o755, "weazlback-recovery.wzrk": 0o644} {
 		info, err := os.Stat(filepath.Join(target, name))

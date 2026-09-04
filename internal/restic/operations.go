@@ -87,6 +87,10 @@ func (s Service) BackupWithProgress(ctx context.Context, repo Repository, profil
 }
 
 func (s Service) BackupMachineWithProgress(ctx context.Context, repo Repository, profile, machineID string, paths, excludes []string, dryRun, incomplete bool, progress func(BackupProgress)) error {
+	return s.BackupMachineTaggedWithProgress(ctx, repo, profile, machineID, nil, paths, excludes, dryRun, incomplete, progress)
+}
+
+func (s Service) BackupMachineTaggedWithProgress(ctx context.Context, repo Repository, profile, machineID string, tags, paths, excludes []string, dryRun, incomplete bool, progress func(BackupProgress)) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("backup profile %q has no paths", profile)
 	}
@@ -96,6 +100,11 @@ func (s Service) BackupMachineWithProgress(ctx context.Context, repo Repository,
 	args := []string{"backup", "--json", "--tag", "weazlback", "--tag", "profile:" + profile}
 	if machineID != "" {
 		args = append(args, "--tag", "machine:"+machineID)
+	}
+	for _, tag := range tags {
+		if strings.TrimSpace(tag) != "" {
+			args = append(args, "--tag", tag)
+		}
 	}
 	if incomplete {
 		args = append(args, "--tag", "incomplete")
@@ -268,31 +277,4 @@ func (s Service) PruneMachineProfile(ctx context.Context, repo Repository, machi
 		"--keep-weekly", fmt.Sprint(weekly), "--keep-monthly", fmt.Sprint(monthly)}
 	_, err := s.Runner.Run(ctx, repo, args...)
 	return err
-}
-
-func DecodeBackupSummary(stream []byte) (map[string]any, error) {
-	decoder := json.NewDecoder(bytesReader(stream))
-	var summary map[string]any
-	for decoder.More() {
-		var event map[string]any
-		if err := decoder.Decode(&event); err != nil {
-			return nil, err
-		}
-		if event["message_type"] == "summary" {
-			summary = event
-		}
-	}
-	return summary, nil
-}
-
-type byteReader struct{ data []byte }
-
-func bytesReader(data []byte) *byteReader { return &byteReader{data: data} }
-func (r *byteReader) Read(p []byte) (int, error) {
-	if len(r.data) == 0 {
-		return 0, io.EOF
-	}
-	n := copy(p, r.data)
-	r.data = r.data[n:]
-	return n, nil
 }

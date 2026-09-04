@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -84,7 +83,7 @@ func compactNavigationLabel(current mode) string {
 		modeRestore: "Restore", modeProfiles: "Apps", modeDestinations: "Targets",
 		modeRecovery: "Recovery", modeCheck: "Repo check", modeSchedule: "Schedule",
 		modeTune: "Tune",
-		modeNuke: "Nuke",
+		modeNuke: "Nuke", modeSystemSnapshot: "System set",
 	}
 	return labels[current]
 }
@@ -151,6 +150,18 @@ func (m Model) screen() string {
 	}
 	if m.mode == modeNuke {
 		return m.nukeScreen()
+	}
+	if m.mode == modeSystemSnapshot {
+		body := m.styles.header.Render("SYSTEM SNAPSHOT") + "\n\n"
+		body += "One dated recovery generation binds Package Capsule, Core, Home, and Heavy.\nIncomplete generations remain retryable and are never selected automatically.\n\n"
+		body += "[enter] Create complete generation\n[r] Retry latest incomplete\n[l] List generations\n[v] Quick cryptographic verify\n[s] Preview failed/incomplete scrub"
+		if m.busy {
+			body += "\n\n" + m.styles.status.Render("◉ "+m.operation+"…")
+		}
+		if m.err != "" {
+			body += "\n\n" + m.styles.status.Render(m.err)
+		}
+		return body
 	}
 	return m.styles.header.Render(m.title()) + "\n\n" + navigationDescription(m.mode)
 }
@@ -267,29 +278,4 @@ func (m Model) backupScreen() string {
 		body += "\n\n" + m.styles.status.Render(m.err)
 	}
 	return body
-}
-
-func (m Model) snapshotsScreen() string {
-	body := m.styles.header.Render("RESTORE POINTS") + "\n\n"
-	if m.busy {
-		return body + m.styles.status.Render("◉ loading encrypted snapshot index…")
-	}
-	if len(m.snapshots) == 0 {
-		return body + "Press enter to load recoverable point-in-time versions."
-	}
-	for i, snapshot := range m.snapshots {
-		if i == 8 {
-			body += "…\n"
-			break
-		}
-		body += fmt.Sprintf("%s  %s  %s\n", snapshot.ShortID, snapshot.Time.Local().Format("2006-01-02 15:04"), strings.Join(snapshot.Tags, ","))
-	}
-	return body
-}
-
-func timeText(seconds uint64) string {
-	if seconds == 0 {
-		return "--"
-	}
-	return fmt.Sprintf("%s", time.Duration(seconds)*time.Second)
 }

@@ -32,6 +32,15 @@ func TestGuidedRecoveryDefaultsToCoreHomeScope(t *testing.T) {
 	}
 }
 
+func TestRecoveryBinaryProvenanceIsVisibleBeforeUnlock(t *testing.T) {
+	m := New()
+	m.mediaVersion = "1.2.3-test"
+	m.stage = "pass"
+	if view := m.View(); !strings.Contains(view, "recovery binary 1.2.3-test") {
+		t.Fatalf("view=%q", view)
+	}
+}
+
 func TestPlatformMismatchUsesOneWarningInterstitial(t *testing.T) {
 	m := New()
 	prepared := &freshrestore.Restore{Plan: freshrestore.Plan{ScopeDecision: freshrestore.ScopeDecision{PlatformMismatch: true, Warning: freshrestore.PlatformMismatchWarning}}}
@@ -46,24 +55,37 @@ func TestPlatformMismatchUsesOneWarningInterstitial(t *testing.T) {
 	}
 }
 
-func TestDestinationPickerDefaultsToKitActiveAndSelectsAnother(t *testing.T) {
+func TestDestinationPickerDefaultsToNewestRecoverableSource(t *testing.T) {
 	m := New()
 	m.stage = "destination-loading"
 	message := destinationsMsg{catalog: freshrestore.RecoveryCatalog{Active: "ssh", Destinations: []config.Destination{
 		{ID: "local", Name: "NVMe", Kind: "local", Repository: "/mnt/weazlback"},
 		{ID: "ssh", Name: "Remote", Kind: "ssh", Repository: "sftp:user@host:/repo"},
+	}, Summaries: map[string]freshrestore.DestinationRecoverySummary{
+		"local": {LatestComplete: time.Unix(200, 0)}, "ssh": {LatestComplete: time.Unix(100, 0)},
 	}}}
 	updated, _ := m.Update(message)
 	m = updated.(Model)
-	if m.stage != "destination-choice" || m.destinationIndex != 1 {
+	if m.stage != "destination-choice" || m.destinationIndex != 0 || m.destinations[0].ID != "local" {
 		t.Fatalf("stage=%q index=%d", m.stage, m.destinationIndex)
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
-	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	if m.destination != "local" || m.stage != "identity-loading" {
 		t.Fatalf("destination=%q stage=%q", m.destination, m.stage)
+	}
+}
+
+func TestChoosingOlderDestinationRequiresWarningInterstitial(t *testing.T) {
+	m := New()
+	m.stage = "destination-choice"
+	m.destinations = []config.Destination{{ID: "new", Name: "NVMe"}, {ID: "old", Name: "Remote"}}
+	m.destinationSummaries = map[string]freshrestore.DestinationRecoverySummary{"new": {LatestComplete: time.Unix(200, 0)}, "old": {LatestComplete: time.Unix(100, 0)}}
+	m.destinationIndex = 1
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.stage != "destination-warning" || !strings.Contains(m.View(), "OLDER RECOVERY SOURCE") {
+		t.Fatalf("stage=%q view=%q", m.stage, m.View())
 	}
 }
 

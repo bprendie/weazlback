@@ -3,12 +3,14 @@ package recovery
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const Instructions = `WEAZLBACK RECOVERY
@@ -44,6 +46,17 @@ type MediaSources struct {
 	Restore   string
 	Kit       string
 	Restic    string
+	Version   string
+	Source    string
+}
+
+type MediaProvenance struct {
+	SchemaVersion   int       `json:"schema_version"`
+	Version         string    `json:"version"`
+	Source          string    `json:"source"`
+	BuiltAt         time.Time `json:"prepared_at"`
+	WeazlbackSHA256 string    `json:"weazlback_sha256"`
+	RestoreSHA256   string    `json:"weazlback_restore_sha256"`
 }
 
 func PrepareMedia(target string, sources MediaSources) error {
@@ -72,10 +85,10 @@ func PrepareMedia(target string, sources MediaSources) error {
 	if _, err := copyVerified(filepath.Join(target, "weazlback-recovery.wzrk"), sources.Kit, 0o644); err != nil {
 		return err
 	}
-	return writeSupportFiles(target)
+	return writeSupportFiles(target, sources.Version, sources.Source)
 }
 
-func RefreshMedia(target, weazlback, restore, restic string) error {
+func RefreshMedia(target, weazlback, restore, restic, version, source string) error {
 	info, err := os.Stat(target)
 	if err != nil || !info.IsDir() {
 		return errors.New("recovery target must be an existing directory")
@@ -96,17 +109,32 @@ func RefreshMedia(target, weazlback, restore, restic string) error {
 			return err
 		}
 	}
-	return writeSupportFiles(target)
+	return writeSupportFiles(target, version, source)
 }
 
-func writeSupportFiles(target string) error {
+func writeSupportFiles(target, version, source string) error {
 	if err := atomicBytes(filepath.Join(target, "RESTORE.txt"), []byte(Instructions), 0o644); err != nil {
 		return err
 	}
 	if err := atomicBytes(filepath.Join(target, "THIRD_PARTY_NOTICES.txt"), []byte(ThirdPartyNotices), 0o644); err != nil {
 		return err
 	}
-	names := []string{"weazlback", "weazlback-restore", "RESTORE.txt", "THIRD_PARTY_NOTICES.txt"}
+	appHash, err := fileSHA256(filepath.Join(target, "weazlback"))
+	if err != nil {
+		return err
+	}
+	restoreHash, err := fileSHA256(filepath.Join(target, "weazlback-restore"))
+	if err != nil {
+		return err
+	}
+	provenance, err := json.MarshalIndent(MediaProvenance{SchemaVersion: 1, Version: version, Source: source, BuiltAt: time.Now(), WeazlbackSHA256: appHash, RestoreSHA256: restoreHash}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := atomicBytes(filepath.Join(target, "WEAZLBACK-VERSION.json"), append(provenance, '\n'), 0o644); err != nil {
+		return err
+	}
+	names := []string{"weazlback", "weazlback-restore", "WEAZLBACK-VERSION.json", "RESTORE.txt", "THIRD_PARTY_NOTICES.txt"}
 	if _, err := os.Stat(filepath.Join(target, "restic")); err == nil {
 		names = append(names, "restic")
 	}
@@ -123,6 +151,15 @@ func writeSupportFiles(target string) error {
 		checksums = append(checksums, hex.EncodeToString(sum[:])+"  "+name)
 	}
 	return atomicBytes(filepath.Join(target, "SHA256SUMS"), []byte(strings.Join(checksums, "\n")+"\n"), 0o644)
+}
+
+func fileSHA256(path string) (string, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func copyVerified(destination, source string, mode os.FileMode) (string, error) {
