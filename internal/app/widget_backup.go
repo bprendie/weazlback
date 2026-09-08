@@ -9,9 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,18 +49,13 @@ func widgetBackup(ctx context.Context, args []string, stdin io.Reader, stdout, s
 }
 
 func runUnlockedWidgetBackup(ctx context.Context, cfg config.Config, destination *config.Destination, v *vault.File, profileNames []string, stdout io.Writer) error {
-	if destination.Privileged {
-		if destination.Kind != "local" {
-			return errors.New("privileged SSH sources require the full Weazlback interface")
-		}
-		if err := adoptWidgetRepository(cfg, destination); err != nil {
-			return err
-		}
-	}
 	repo, err := repositoryFrom(v, *destination)
 	if err != nil {
 		return err
 	}
+	// The widget has no terminal for sudo. Let polkit request the system
+	// password for this operation, including access to privileged local repos.
+	repo.GraphicalElevation = true
 	if err := verifyRepositoryIdentity(ctx, &cfg, destination, repo, true); err != nil {
 		return err
 	}
@@ -95,34 +87,24 @@ func runUnlockedWidgetBackup(ctx context.Context, cfg config.Config, destination
 			}
 		}
 		report := preflight.Scan(prepared.Includes, prepared.Excludes)
-		if report.Unreadable > 0 && !destination.Privileged {
-			return fmt.Errorf("%s needs sudo for %d unreadable paths; open Weazlback", strings.ToUpper(name), report.Unreadable)
+		if report.Unreadable > 0 {
+			repo.Elevated = true
 		}
 		profiles = append(profiles, prepared)
 	}
+	// Elevated local writes may create root-owned repository objects. Remember
+	// that access requirement just as the TUI does, including for later checks.
+	if repo.Elevated && !destination.Privileged {
+		destination.Privileged = true
+		path, err := config.Path()
+		if err != nil {
+			return err
+		}
+		if err := config.Save(path, cfg); err != nil {
+			return err
+		}
+	}
 	return runWidgetProfiles(ctx, repo, *destination, cfg.Machine.ID, profiles, v, stdout)
-}
-
-func adoptWidgetRepository(cfg config.Config, destination *config.Destination) error {
-	path := filepath.Clean(destination.Repository)
-	home, _ := os.UserHomeDir()
-	if !filepath.IsAbs(path) || path == "/" || path == home || len(strings.Split(path, string(os.PathSeparator))) < 3 {
-		return errors.New("refusing graphical ownership repair for an unsafe repository path")
-	}
-	owner := strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid())
-	command := exec.Command("pkexec", "/usr/bin/chown", "-R", owner, "--", path)
-	if err := command.Run(); err != nil {
-		return errors.New("administrator authentication was cancelled or repository ownership repair failed")
-	}
-	destination.Privileged = false
-	configPath, err := config.Path()
-	if err != nil {
-		return err
-	}
-	if err := config.Save(configPath, cfg); err != nil {
-		return fmt.Errorf("save repaired destination: %w", err)
-	}
-	return nil
 }
 
 func widgetUnlock(stdin io.Reader, stdout io.Writer) error {

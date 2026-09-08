@@ -83,8 +83,20 @@ func TestDefaultConnectionCountIsFour(t *testing.T) {
 }
 
 func TestElevatedPasswordUsesParentPipe(t *testing.T) {
+	for name, graphical := range map[string]bool{"terminal": false, "graphical": true} {
+		t.Run(name, func(t *testing.T) {
+			testElevatedPasswordUsesParentPipe(t, graphical)
+		})
+	}
+}
+
+func testElevatedPasswordUsesParentPipe(t *testing.T, graphical bool) {
 	dir := t.TempDir()
-	resticPath, sudoPath := filepath.Join(dir, "restic"), filepath.Join(dir, "sudo")
+	elevator := "sudo"
+	if graphical {
+		elevator = "pkexec"
+	}
+	resticPath, sudoPath := filepath.Join(dir, "restic"), filepath.Join(dir, elevator)
 	resticBody := "#!/bin/sh\nIFS= read -r pass < \"$RESTIC_PASSWORD_FILE\"\n[ \"$pass\" = root-secret ] || exit 92\nprintf elevated-ok\n"
 	sudoBody := "#!/bin/sh\nwhile [ \"$1\" != env ]; do shift; done\nshift\nexec env \"$@\"\n"
 	if err := os.WriteFile(resticPath, []byte(resticBody), 0o700); err != nil {
@@ -96,7 +108,7 @@ func TestElevatedPasswordUsesParentPipe(t *testing.T) {
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	runner := New(nil)
 	runner.Binary = resticPath
-	out, err := runner.Run(context.Background(), Repository{Location: dir, Password: []byte("root-secret"), Elevated: true}, "check")
+	out, err := runner.Run(context.Background(), Repository{Location: dir, Password: []byte("root-secret"), Elevated: true, GraphicalElevation: graphical}, "check")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -127,6 +127,7 @@ Panel {
         Button { text: "Lock vault"; foreground: root.fg; onClicked: { unlockAction.running = false; root.vaultOpen = false; root.passphrase = "" } }
       }
       Text { visible: !root.travelMode && root.actionError !== ""; width: parent.width; wrapMode: Text.Wrap; text: "× " + root.actionError; color: root.fg }
+      Text { visible: !root.travelMode && backupAction.running; width: parent.width; wrapMode: Text.Wrap; text: "If authorization appears, enter your system password to read protected files."; color: root.fg }
       Button { visible: !root.travelMode; text: "Backup now — Core + Home"; foreground: root.fg; enabled: root.vaultOpen && !backupAction.running && !Model.active(root.status); onClicked: root.backup("routine") }
       Button { visible: !root.travelMode && root.status.cancellable === true; text: root.cancelConfirmOpen ? "Keep backup running" : "Cancel backup…"; foreground: root.fg; onClicked: root.cancelConfirmOpen = !root.cancelConfirmOpen }
       Row {

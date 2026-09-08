@@ -95,6 +95,7 @@ func serveAgentRequest(ctx context.Context, connection net.Conn, operation *sync
 		defer operation.Unlock()
 		repo, err := repositoryFrom(v, *destination)
 		if err == nil {
+			repo.GraphicalElevation = true
 			err = restic.NewService(io.Discard).Check(ctx, repo, false)
 		}
 		response := agentResponse{OK: err == nil}
