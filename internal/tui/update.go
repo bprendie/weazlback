@@ -5,9 +5,6 @@ import (
 	"strings"
 
 	"github.com/bprendie/weazlback/internal/config"
-	"github.com/bprendie/weazlback/internal/restic"
-	"github.com/bprendie/weazlback/internal/restoretxn"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -232,60 +229,6 @@ func (m Model) operationFinished(msg operationDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	m.snapshots = msg.snapshots
 	return m, nil
-}
-
-func (m Model) restoreBrowseFinished(msg restoreBrowseMsg) (tea.Model, tea.Cmd) {
-	m.busy = false
-	if msg.err != nil {
-		m.err, m.status = msg.err.Error(), "restore-point index failed"
-		return m, nil
-	}
-	m.snapshots, m.restoreEntries, m.restoreSnapshot = msg.snapshots, msg.files, msg.index
-	if len(msg.identities) > 0 {
-		m.restoreIdentities = msg.identities
-		m.restoreIdentity = identityIndex(msg.identities, restic.IdentityID(msg.snapshots[msg.index]))
-	}
-	m.restoreInput, m.restoreStage, m.restoreIndex = newRestoreInput(), "browse", 0
-	if m.restoreTreePath == "" {
-		m.restoreTreePath = restoreRoot(msg.files)
-	}
-	m.filterRestore()
-	if m.restoreSearching {
-		m.restoreInput.Focus()
-	}
-	if m.restoreDeletedOnly {
-		m.restoreResults = deletedCatalogResults(m.restoreCatalog, m.restoreIdentities, m.restoreIdentity, msg.snapshots[msg.index].Time)
-		m.restoreVisible = nil
-		m.restoreSearching = true
-		m.restoreInput.Prompt = "deleted since then > "
-	}
-	m.status, m.err = fmt.Sprintf("browsing %d paths from %s", len(msg.files), msg.snapshots[msg.index].ShortID), ""
-	intent := m.restoreIntent
-	m.restoreIntent = ""
-	if intent == "bundle" {
-		m.restoreBundleChoices = map[restoretxn.Bundle]bool{restoretxn.SystemConfig: true, restoretxn.PersonalFiles: true}
-		m.restoreBundleTime, m.restoreBundleMode, m.restoreStage = msg.snapshots[msg.index].Time, "overlay", "bundle-components"
-		m.status = "choose point-in-time file bundles"
-	}
-	if len(msg.identities) == 0 {
-		return m, textinput.Blink
-	}
-	m.restoreCatalogState = "loading encrypted history catalog in background"
-	commands := []tea.Cmd{textinput.Blink, m.loadRestoreCatalogCmd(msg.snapshots)}
-	if intent == "applications" {
-		m.restoreStage, m.status = "applications-loading", "loading timestamp-scoped application manifest"
-		commands = append(commands, m.loadApplicationPlanCmd())
-	}
-	return m, tea.Batch(commands...)
-}
-
-func identityIndex(identities []restic.Identity, id string) int {
-	for i := range identities {
-		if identities[i].ID == id {
-			return i
-		}
-	}
-	return 0
 }
 
 func (m Model) preflightFinished(msg preflightDoneMsg) (tea.Model, tea.Cmd) {

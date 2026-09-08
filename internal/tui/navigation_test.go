@@ -181,11 +181,11 @@ func TestCtrlCCancelsBusyOperation(t *testing.T) {
 	}
 }
 
-func TestRestoreSearchDoesNotStealGlobalShortcutsUntilSlash(t *testing.T) {
-	m := Model{styles: newStyles(), mode: modeRestore, restoreStage: "browse", restoreInput: newRestoreInput()}
+func TestRestoreSearchOwnsShortcutsInItsWorkspace(t *testing.T) {
+	m := Model{styles: newStyles(), workspace: "restore", mode: modeRestore, restoreStage: "browse", restoreInput: newRestoreInput()}
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	if updated.(Model).mode != modeHome {
-		t.Fatal("restore browser stole global home shortcut")
+	if updated.(Model).mode != modeRestore {
+		t.Fatal("backup home shortcut escaped the restore workspace")
 	}
 	m.mode = modeRestore
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})

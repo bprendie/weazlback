@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/bprendie/weazlback/internal/restic"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -14,6 +13,15 @@ import (
 
 func (m Model) restoreSessionKey(key string) (tea.Model, tea.Cmd, bool) {
 	if key == "ctrl+c" {
+		if m.loadCancel != nil {
+			m.loadCancel()
+		}
+		if m.searchCancel != nil {
+			m.searchCancel()
+		}
+		if m.catalogCancel != nil {
+			m.catalogCancel()
+		}
 		if m.busy && m.cancel != nil {
 			m.cancel()
 			m.status = "cancelling " + m.operation
@@ -23,6 +31,20 @@ func (m Model) restoreSessionKey(key string) (tea.Model, tea.Cmd, bool) {
 	}
 	if key != "q" {
 		return m, nil, false
+	}
+	if !m.restoreTextFocused() {
+		if m.loadCancel != nil {
+			m.loadCancel()
+		}
+		m.loadRequest++
+		if m.searchCancel != nil {
+			m.searchCancel()
+		}
+		m.searchRequest++
+		if m.catalogCancel != nil {
+			m.catalogCancel()
+		}
+		m.catalogRequest++
 	}
 	if os.Getenv("TMUX") != "" {
 		m.status = "detaching — vault remains in the tmux backend"
@@ -34,39 +56,27 @@ func (m Model) restoreSessionKey(key string) (tea.Model, tea.Cmd, bool) {
 func (m Model) updateRestoreBrowserKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "/":
+		m.browserIndex = m.restoreIndex
 		m.restoreSearching, m.restorePathMode, m.restoreDeletedOnly, m.restorePathHistory, m.restoreIndex = true, false, false, false, 0
 		m.restoreInput = newRestoreInput()
 		m.restoreInput.Prompt = "/ "
 		m.restoreInput.Focus()
-		m.filterRestore()
-		return m, textinput.Blink
-	case "up", "k":
-		m.restoreIndex = max(0, m.restoreIndex-1)
-	case "down", "j":
-		m.restoreIndex = min(max(0, len(m.restoreVisible)-1), m.restoreIndex+1)
+		next, search := m.queueRestoreSearch()
+		return next, tea.Batch(textinput.Blink, search)
+	case "up", "k", "down", "j", "pgup", "pgdown", "home", "end":
+		m.restoreIndex = moveList(m.restoreIndex, len(m.restoreVisible), m.restorePageSize(), msg.String())
 	case "right", "enter":
-		if len(m.restoreVisible) == 0 {
-			return m, nil
-		}
-		entry := m.restoreVisible[m.restoreIndex]
-		if entry.Type == "dir" {
-			m.restoreTreePath, m.restoreIndex = entry.Path, 0
-			m.filterRestore()
-		} else {
-			m.restoreVersionPath, m.restoreStage = entry.Path, "versions"
-		}
+		m.moveRestoreTree(true)
 	case "left", "backspace":
-		parent := filepath.Dir(m.restoreTreePath)
-		if parent != m.restoreTreePath {
-			m.restoreTreePath, m.restoreIndex = parent, 0
-			m.filterRestore()
-		}
+		m.moveRestoreTree(false)
 	case " ":
 		m = m.toggleRestoreBasket()
-	case "e":
-		if len(m.restoreBasket) > 0 {
-			m.restoreStage, m.restoreTargetMode, m.status = "transaction-target", "original", "choose restore destination"
-		}
+	case "e", "r", "ctrl+e":
+		m.openRestoreBasket()
+	case "t":
+		m.openRestorePoints()
+	case "ctrl+r":
+		return m.refreshRestoreHistory()
 	case "[":
 		return m.previousIdentityPoint(1)
 	case "]":
@@ -91,7 +101,7 @@ func (m Model) toggleRestoreBasket() Model {
 		delete(m.restoreBasket, path)
 	} else if len(m.snapshots) > 0 && m.restoreSnapshot < len(m.snapshots) {
 		point := m.snapshots[m.restoreSnapshot]
-		m.restoreBasket[path] = restoreBasketItem{Path: path, Snapshot: point.ID, MachineID: restic.IdentityID(point), Profile: restic.Profile(point.Tags), Time: point.Time}
+		m.addRestoreBasket(restoreBasketItem{Path: path, Snapshot: point.ID, MachineID: restic.IdentityID(point), Profile: restic.Profile(point.Tags), Time: point.Time})
 	}
 	m.status = restoreBasketStatus(len(m.restoreBasket))
 	return m
@@ -99,9 +109,9 @@ func (m Model) toggleRestoreBasket() Model {
 
 func restoreBasketStatus(count int) string {
 	if count == 1 {
-		return "1 path selected for restore"
+		return "1 path selected — press r to restore"
 	}
-	return fmt.Sprintf("%d paths selected for restore", count)
+	return fmt.Sprintf("%d paths selected — press r to restore", count)
 }
 
 func (m Model) loadSelectedIdentity() (tea.Model, tea.Cmd) {
@@ -110,10 +120,10 @@ func (m Model) loadSelectedIdentity() (tea.Model, tea.Cmd) {
 	}
 	id := m.restoreIdentities[m.restoreIdentity].ID
 	m.restoreTreePath = ""
-	for i, snapshot := range m.snapshots {
-		if len(restic.FilterIdentity([]restic.Snapshot{snapshot}, id)) == 1 {
-			return m.loadRestorePoint(i)
-		}
+	m.searchScope, m.restoreSearching, m.restoreAllMachines = "", false, false
+	point := preferredRestorePoint(restic.FilterIdentity(m.snapshots, id))
+	if point.ID != "" {
+		return m.loadRestorePoint(snapshotIndex(m.snapshots, point.ID))
 	}
 	return m, nil
 }
@@ -124,6 +134,17 @@ func (m Model) previousIdentityPoint(direction int) (tea.Model, tea.Cmd) {
 	}
 	id := m.restoreIdentities[m.restoreIdentity].ID
 	filtered := restic.FilterIdentity(m.snapshots, id)
+	profile := restic.Profile(m.snapshots[m.restoreSnapshot].Tags)
+	points := make([]restic.Snapshot, 0, len(filtered))
+	for _, p := range filtered {
+		if restic.Profile(p.Tags) == profile {
+			points = append(points, p)
+		}
+	}
+	filtered = points
+	if len(filtered) == 0 {
+		return m, nil
+	}
 	current := 0
 	for i := range filtered {
 		if filtered[i].ID == m.snapshots[m.restoreSnapshot].ID {

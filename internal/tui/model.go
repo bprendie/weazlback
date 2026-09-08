@@ -45,6 +45,7 @@ type navEntry struct {
 
 type restoreBasketItem struct {
 	Path, Snapshot, MachineID, Profile string
+	Destination                        string
 	Time                               time.Time
 }
 
@@ -69,6 +70,7 @@ func navigationIndex(wanted mode) int {
 }
 
 type Model struct {
+	restoreNavigation
 	styles               styles
 	mode                 mode
 	workspace            string
@@ -241,5 +243,12 @@ func (m Model) View() string {
 		help = "tab • arrows • enter • ? • q"
 	}
 	footer := m.styles.status.Render(m.status) + "\n" + m.styles.help.Render(help)
+	if m.workspace == "restore" {
+		message := m.status
+		if m.err != "" {
+			message = m.err
+		}
+		footer = m.restoreViewport(message+"\n"+"/ search • arrows move • Esc back • q detach", width, 2)
+	}
 	return m.styles.frame.Render(strings.Join([]string{header, body, footer}, "\n"))
 }

@@ -187,15 +187,19 @@ Open Weazlback from the widget, focus the navigation rail with `Tab`, and press 
 
 The dashboard exposes five recovery tools:
 
-* **Browse history (`f` or `Enter`):** Walk one Restore Point as a filesystem tree. `Right` or `Enter` descends into a directory; `Left` climbs toward `/`; `↑` and `↓` move the cursor.
+* **Browse history (`f` or `Enter`):** Walk an expandable filesystem tree. `Right` or `Enter` expands a directory; `Left` collapses it or selects its parent. `↑`/`↓`, Page Up/Down, and Home/End keep the highlighted item in view.
 * **Search (`/`):** Fuzzy-search filenames across known timestamps. Results show the same path once with its available version dates, instead of burying you in duplicate filenames.
-* **Path mode (`/p PATH`):** Jump straight to a known location such as `/p ~/Pictures/wallpapers`. An exact directory opens the tree there; a partial path filters inside the selected Restore Point.
+* **Path mode (`/p PATH`):** Jump straight to a known location such as `/p ~/Pictures/wallpapers`. The tilde belongs to the source machine. An exact directory opens there; a partial path searches below the closest directory. Press `/` to narrow the scoped search, or `Ctrl+G` to clear that scope.
 * **Bundle restore (`g`):** Restore System Config, Personal Files, Heavy data, or a selected combination around a requested time.
 * **Applications (`a`):** Reconcile the selected machine's package and service manifest without touching filesystem bundles.
 
-The browser always identifies the source machine and exact Restore Point at the top. Use `i` to cycle machine identities, `[` and `]` to move through time, and `A` when a filename may exist on another rig. `H` expands a path search across its catalogued history. Deleted paths are marked in orange; yellow is selection, not danger.
+The browser identifies the source machine, date, and profile at the top. It starts with the latest healthy Home point when available. Use `i` to switch machines, `t` to pick a dated point, and `[`/`]` to move through the current profile's history. Inside the point chooser, `/` resolves a date or weekday and highlights the nearest available point for your approval.
 
-Press `Space` to add files or directories to the restore basket. Every basket item remains pinned to the machine and Restore Point where you selected it, even if you keep browsing through time. Press `e` to execute the basket, then choose where the payload lands:
+While searching, `Ctrl+A` includes other machines, `Ctrl+H` expands path mode across history, and `Ctrl+L` loads more matches. Letters remain letters in the search box—even `q`. Deleted paths are orange; the active selection is yellow.
+
+Search uses the encrypted filename catalog. If it is missing, the current point remains searchable immediately. `Ctrl+R` requests a bounded history refresh for the selected machine/profile; it never holds browsing hostage to a repository-wide rebuild.
+
+Open a file with Enter to choose its dated version, then press `Space` to add it. Space also selects files or directories directly from the tree. Every basket item remains pinned to its source machine and point while you browse elsewhere. Press `r` for **Restore selected** (`Ctrl+E` while typing a search; `e` still works outside search). Review the selection, then press Enter to choose where the payload lands:
 
 * **Original path:** Put it back where it lived, mapping the source home into the current user's home.
 * **Private staging:** Extract and validate it without touching live files.

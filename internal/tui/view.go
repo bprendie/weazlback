@@ -28,7 +28,7 @@ func (m Model) content(width, height int) string {
 		return m.styles.focused.Width(width).Height(height).Render(m.helpScreen())
 	}
 	if m.workspace == "restore" {
-		return m.styles.focused.Width(width).Height(height).Render(m.restoreScreen())
+		return m.styles.focused.Width(width).Height(height).Render(m.restoreViewport(m.restoreScreen(), width-4, height))
 	}
 	if width < 68 {
 		if m.railFocused {

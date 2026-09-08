@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/bprendie/weazlback/internal/catalog"
@@ -17,6 +16,8 @@ import (
 )
 
 type restoreBrowseMsg struct {
+	tree       *restoreNavigation
+	request    uint64
 	snapshots  []restic.Snapshot
 	files      []restic.FileEntry
 	index      int
@@ -26,6 +27,7 @@ type restoreBrowseMsg struct {
 }
 
 type restoreCatalogMsg struct {
+	request uint64
 	catalog catalog.Catalog
 	err     error
 	elapsed time.Duration
@@ -38,6 +40,7 @@ type restoreLiveHintsMsg struct {
 type fullRestoreDoneMsg struct{ err error }
 
 func (m Model) startOrRunRestore() (tea.Model, tea.Cmd) {
+	m.loadSpecific = false
 	if m.busy || m.restoreStage == "full" {
 		return m, nil
 	}
@@ -47,14 +50,29 @@ func (m Model) startOrRunRestore() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.busy, m.status, m.err = true, "loading machine history and encrypted path catalog", ""
+	if repo.Elevated && !m.restoreAuthorized {
+		m.busy = false
+		m.status = "Authorize repository access with your system password"
+		return m, authorizeRestoreLoad(0, false)
+	}
+	m.restoreStage = "load"
+	m.restoreCatalog = catalog.New()
+	if m.loadCancel != nil {
+		m.loadCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.loadCancel = cancel
+	m.loadRequest++
+	request := m.loadRequest
 	return m, func() tea.Msg {
+		defer cancel()
 		service := restic.NewService(io.Discard)
-		snapshots, err := service.Snapshots(context.Background(), repo)
+		snapshots, err := service.Snapshots(ctx, repo)
 		if err != nil || len(snapshots) == 0 {
 			if err == nil {
 				err = fmt.Errorf("repository has no restore points")
 			}
-			return restoreBrowseMsg{err: err}
+			return restoreBrowseMsg{request: request, err: err}
 		}
 		sort.Slice(snapshots, func(i, j int) bool { return snapshots[i].Time.After(snapshots[j].Time) })
 		identities := restic.GroupIdentities(snapshots, m.cfg.Machine.ID, m.cfg.Machine.Name)
@@ -64,58 +82,15 @@ func (m Model) startOrRunRestore() (tea.Model, tea.Cmd) {
 		}
 		filtered := restic.FilterIdentity(snapshots, machineID)
 		if len(filtered) == 0 {
-			return restoreBrowseMsg{err: fmt.Errorf("selected machine has no restore points")}
+			return restoreBrowseMsg{request: request, err: fmt.Errorf("selected machine has no restore points")}
 		}
-		selected := filtered[0]
+		selected := preferredRestorePoint(filtered)
+		if selected.ID == "" {
+			return restoreBrowseMsg{request: request, err: fmt.Errorf("selected machine has no file restore points")}
+		}
 		index := snapshotIndex(snapshots, selected.ID)
-		files, err := service.Files(context.Background(), repo, selected.ID)
-		return restoreBrowseMsg{snapshots: snapshots, files: files, index: index, identities: identities, err: err}
-	}
-}
-
-func loadRestoreCatalog(m Model, destinationID string, service restic.Service, repo restic.Repository, snapshots []restic.Snapshot) (catalog.Catalog, error) {
-	cat := catalog.New()
-	path, err := catalog.Path(destinationID)
-	if err != nil {
-		return cat, err
-	}
-	if loaded, loadErr := catalog.Load(path, m.vault); loadErr == nil {
-		cat = loaded
-	}
-	profiles := map[string]bool{}
-	for _, point := range snapshots {
-		if restic.MachineID(point.Tags) != "" && restic.Profile(point.Tags) != "" {
-			profiles[restic.MachineID(point.Tags)+"\x00"+restic.Profile(point.Tags)] = true
-		}
-	}
-	for pair := range profiles {
-		parts := strings.SplitN(pair, "\x00", 2)
-		if err := catalog.Update(context.Background(), &cat, service, repo, snapshots, parts[0], parts[1]); err != nil {
-			cat = catalog.New()
-			for rebuildPair := range profiles {
-				rebuild := strings.SplitN(rebuildPair, "\x00", 2)
-				if rebuildErr := catalog.Update(context.Background(), &cat, service, repo, snapshots, rebuild[0], rebuild[1]); rebuildErr != nil {
-					return cat, fmt.Errorf("catalog rebuild: %w", rebuildErr)
-				}
-			}
-			break
-		}
-	}
-	if err := catalog.Save(path, cat, m.vault); err != nil {
-		return cat, err
-	}
-	return cat, nil
-}
-
-func (m Model) loadRestoreCatalogCmd(snapshots []restic.Snapshot) tea.Cmd {
-	destination, _, repo, err := m.activeRuntime("")
-	if err != nil {
-		return func() tea.Msg { return restoreCatalogMsg{err: err} }
-	}
-	return func() tea.Msg {
-		started := time.Now()
-		cat, loadErr := loadRestoreCatalog(m, destination.ID, restic.NewService(io.Discard), repo, snapshots)
-		return restoreCatalogMsg{catalog: cat, err: loadErr, elapsed: time.Since(started)}
+		files, err := service.Files(ctx, repo, selected.ID)
+		return restoreBrowseMsg{tree: prepareRestoreTree(files), request: request, snapshots: snapshots, files: files, index: index, identities: identities, err: err}
 	}
 }
 

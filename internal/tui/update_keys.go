@@ -4,11 +4,13 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.restoreTextFocused() && m.vaultStage == "" {
+		return m.updateRestoreWorkspaceKey(msg)
+	}
 	if handled, model, cmd := m.updateModalKey(msg); handled {
 		return model, cmd
 	}
@@ -20,31 +22,13 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "Restore Mode unavailable while backup work is active"
 			return m, nil
 		}
-		m.backupMode, m.backupIndex, m.backupRailFocused = m.mode, m.index, m.railFocused
-		m.workspace, m.mode, m.index, m.restoreStage, m.railFocused = "restore", modeRestore, navigationIndex(modeRestore), "dashboard", false
-		m.status = "Restore Mode"
-		return m, nil
+		return m.enterRestoreWorkspace()
 	}
 	if m.mode == modeNuke && !m.railFocused {
 		return m.updateNuke(msg)
 	}
 	if m.mode == modeTune && !m.railFocused && m.tuneStage != "" {
 		return m.updateTuneKey(msg)
-	}
-	if m.mode == modeRestore && m.restoreStage == "browse" {
-		if m.restoreSearching || msg.String() == "[" || msg.String() == "]" {
-			return m.updateRestore(msg)
-		}
-		if msg.String() == "/" {
-			m.restoreSearching = true
-			m.restoreInput.Focus()
-			m.status = "searching restore-point paths"
-			return m, textinput.Blink
-		}
-	}
-	if m.mode == modeRestore && m.restoreStage == "full" &&
-		(msg.String() == "f" || msg.String() == "x" || msg.String() == "enter" || msg.String() == "esc") {
-		return m.updateRestore(msg)
 	}
 	if m.mode == modeRecovery && m.recoveryStage == "" && !m.railFocused {
 		switch msg.String() {
@@ -231,6 +215,9 @@ func (m Model) updateModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 
 func (m Model) activate() (tea.Model, tea.Cmd) {
 	if m.railFocused {
+		if navigation[m.index].mode == modeRestore {
+			return m.enterRestoreWorkspace()
+		}
 		m.mode, m.railFocused = navigation[m.index].mode, false
 		if m.mode == modeDestinations {
 			m.selectActiveDestination()

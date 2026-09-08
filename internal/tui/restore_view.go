@@ -25,6 +25,16 @@ func (m Model) restoreScreen() string {
 			m.styles.status.Render("weazlback-restore") + "\n\n" + m.styles.help.Render("enter launch • esc dashboard")
 	case "versions":
 		return body + m.restoreVersionsView()
+	case "details":
+		return body + m.restoreDetailsView()
+	case "points":
+		return body + m.restorePointsView()
+	case "point-date":
+		return body + m.restoreInput.View() + "\n\nEnter resolves nearest point • Esc back"
+	case "basket", "basket-conflict":
+		return body + m.restoreBasketView()
+	case "load-error":
+		return body + "Unable to load files\n\n" + m.err + "\n\nr retry • Esc dashboard"
 	case "content-confirm":
 		return body + m.styles.header.Render("UNLOCK CONTENT SEARCH") +
 			"\n\nThis decrypts bounded text files from the selected Restore Point for this search only.\nNo content index or plaintext result cache is retained.\n\nQuery  " +
@@ -93,21 +103,31 @@ func (m Model) restoreDashboard() string {
 		"a          Reconcile applications\n" +
 		"j          Active / recent restores\n\n" +
 		"x          Fresh-system recovery\n\n" +
-		m.styles.help.Render("B backup mode • restore execution arrives in R4")
+		m.styles.help.Render("B backup mode")
 }
 
 func (m Model) restoreBrowserView() string {
 	var body strings.Builder
-	body.WriteString(m.restoreContextLine() + "\n\n")
+	body.WriteString(m.restoreRow(m.restoreContextLine(), false) + "\n")
+	body.WriteString(m.restoreSelectionAction())
 	if m.restoreSearching {
-		body.WriteString(m.restoreInput.View() + "\n\n")
+		_, scope := m.searchParameters()
+		if scope == "" {
+			scope = "/"
+		}
+		rangeLabel := "known history"
+		if strings.HasPrefix(strings.TrimSpace(m.restoreInput.Value()), "p ") && !m.restorePathHistory {
+			rangeLabel = "selected point"
+		}
+		body.WriteString(m.restoreRow("IN "+scope+" • "+rangeLabel, false) + "\n")
+		body.WriteString(m.restoreInput.View() + "\n")
 		if len(m.restoreResults) > 0 {
 			body.WriteString(m.catalogResultsView())
 		} else {
 			body.WriteString(m.fileRows(m.restoreVisible))
 		}
 	} else {
-		body.WriteString(m.styles.help.Render("PATH  ") + m.restoreTreePath + "\n\n")
+		body.WriteString(m.restoreRow("PATH  "+m.restoreTreePath, false) + "\n")
 		body.WriteString(m.fileRows(m.restoreVisible))
 	}
 	if len(m.restoreVisible) == 0 && len(m.restoreResults) == 0 {
@@ -119,11 +139,15 @@ func (m Model) restoreBrowserView() string {
 			body.WriteString("  " + hint + "\n")
 		}
 	}
-	body.WriteString("\n" + m.restoreMetadataPreview())
+	body.WriteString("\n" + m.restoreRow(m.restoreMetadataPreview(), false))
 	if m.restoreCatalogState != "" {
-		body.WriteString("\n" + m.styles.help.Render(m.restoreCatalogState))
+		body.WriteString("\n" + m.restoreRow(m.restoreCatalogState, false))
 	}
-	body.WriteString("\n" + m.styles.help.Render("/ search • p PATH • H path history • A all machines • ←/→ tree • space basket • e execute • [/] time • i identity • esc"))
+	if m.restoreSearching {
+		body.WriteString("\n" + m.restoreRow(fmt.Sprintf("%d matches • showing %d • Ctrl+L more • Ctrl+A machines • Ctrl+H history", m.searchCount, max(len(m.restoreResults), len(m.restoreVisible))), false))
+	} else {
+		body.WriteString("\n" + m.restoreRow("Space select • r restore • / search • t points • i machine • v details", false))
+	}
 	return body.String()
 }
 
@@ -162,9 +186,9 @@ func (m Model) restoreContextLine() string {
 	point := "no Restore Point"
 	if len(m.snapshots) > 0 && m.restoreSnapshot < len(m.snapshots) {
 		snapshot := m.snapshots[m.restoreSnapshot]
-		point = snapshot.Time.Local().Format("Mon Jan 02 15:04") + "  " + snapshot.ShortID + "  " + restorePointHealth(snapshot.Tags)
+		point = snapshot.Time.Local().Format("2006-01-02 15:04") + "  " + strings.ToUpper(restic.Profile(snapshot.Tags)) + "  " + restorePointHealth(snapshot.Tags)
 	}
-	return "SOURCE  " + restoreSelection.Render(identity) + "    POINT  " + point + fmt.Sprintf("    BASKET  %d", len(m.restoreBasket))
+	return identity + " • " + point + fmt.Sprintf(" • Basket %d", len(m.restoreBasket))
 }
 
 func restorePointHealth(tags []string) string {
@@ -173,7 +197,7 @@ func restorePointHealth(tags []string) string {
 
 func (m Model) fileRows(entries []restic.FileEntry) string {
 	var body strings.Builder
-	limit := max(8, m.height-15)
+	limit := m.restorePageSize()
 	start := 0
 	if m.restoreIndex >= limit {
 		start = m.restoreIndex - limit + 1
@@ -183,17 +207,22 @@ func (m Model) fileRows(entries []restic.FileEntry) string {
 		glyph := "·"
 		if entry.Type == "dir" {
 			glyph = "▸"
+			if m.expanded[entry.Path] {
+				glyph = "▾"
+			}
 		}
 		checked := " "
 		if _, selected := m.restoreBasket[entry.Path]; selected {
 			checked = "✓"
 		}
-		line := fmt.Sprintf("%s %s %-4s %9s  %s", checked, glyph, entry.Type, bytesText(entry.Size), filepath.Base(entry.Path))
-		if i == m.restoreIndex {
-			line = restoreSelection.Render("> " + line)
+		name := filepath.Base(entry.Path)
+		if m.restoreSearching {
+			name = entry.Path
 		} else {
-			line = "  " + line
+			rel, _ := filepath.Rel(m.restoreTreePath, entry.Path)
+			name = strings.Repeat("  ", max(0, strings.Count(rel, "/"))) + name
 		}
+		line := m.restoreRow(fmt.Sprintf("%s %s %s  %s", checked, glyph, name, bytesText(entry.Size)), i == m.restoreIndex)
 		body.WriteString(line + "\n")
 	}
 	return body.String()
@@ -201,20 +230,14 @@ func (m Model) fileRows(entries []restic.FileEntry) string {
 
 func (m Model) catalogResultsView() string {
 	var body strings.Builder
-	limit := max(8, m.height-15)
-	for i, result := range m.restoreResults {
-		if i >= limit {
-			break
-		}
+	start, end := restoreWindow(m.restoreIndex, len(m.restoreResults), m.restorePageSize())
+	for i := start; i < end; i++ {
+		result := m.restoreResults[i]
 		line := result.Path + "  " + versionDates(result)
 		if deletedLatest(result) {
 			line = lipgloss.NewStyle().Foreground(warning).Render(line + "  DELETED")
 		}
-		if i == m.restoreIndex {
-			line = restoreSelection.Render("> " + line)
-		} else {
-			line = "  " + line
-		}
+		line = m.restoreRow(line, i == m.restoreIndex)
 		body.WriteString(line + "\n")
 	}
 	return body.String()
@@ -237,25 +260,31 @@ func deletedLatest(record catalog.PathRecord) bool {
 }
 
 func (m Model) restoreVersionsView() string {
-	record := m.restoreCatalog.Paths[filepath.Clean(m.restoreVersionPath)]
-	body := m.styles.header.Render("FILE VERSIONS") + "\n\n" + m.restoreVersionPath + "\n\n"
-	if record == nil || len(record.Versions) == 0 {
-		return body + "Only the selected Restore Point is currently catalogued.\n\n" + m.styles.help.Render("← / esc return")
-	}
-	for _, version := range record.Versions {
-		state := version.Change
-		if state == "+" {
-			state = "present"
-		}
-		line := fmt.Sprintf("%-17s  %-8s  %s  %s", version.Time.Local().Format("2006-01-02 15:04"), state, version.Profile, shortID(version.SnapshotID))
+	versions := m.fileVersions()
+	body := "FILE VERSIONS\n" + m.restoreRow(m.restoreVersionPath, false) + "\n"
+	body += m.restoreSelectionAction()
+	start, end := restoreWindow(m.versionIndex, len(versions), m.restorePageSize())
+	for i := start; i < end; i++ {
+		version := versions[i]
+		state := "present"
 		if strings.Contains(version.Change, "-") {
+			state = "DELETED"
+		}
+		selected := " "
+		if item, ok := m.restoreBasket[m.restoreVersionPath]; ok && item.Snapshot == version.SnapshotID {
+			selected = "✓"
+		}
+		line := fmt.Sprintf("%s %s  %s  %s  %s  %s", selected, version.Time.Local().Format("2006-01-02 15:04:05"), m.restoreMachineName(version.MachineID), version.Profile, state, version.Health)
+		if state == "DELETED" {
 			line = lipgloss.NewStyle().Foreground(warning).Render(line)
 		}
-		body += line + "\n"
+		body += m.restoreRow(line, i == m.versionIndex) + "\n"
 	}
-	return body + "\n" + m.styles.help.Render("← / esc return • restoration arrives in R4")
+	if len(versions) == 0 {
+		body += "No available versions in the selected source.\n"
+	}
+	return body + "\n" + m.restoreRow("Space select • r restore • v details • ↑/↓ versions • Esc back", false) + "\n" + m.restoreRow(m.status, false)
 }
-
 func shortID(value string) string {
 	if len(value) > 8 {
 		return value[:8]

@@ -159,6 +159,9 @@ func fuzzy(value, query string) bool {
 }
 
 func score(value, query string) int {
+	if strings.EqualFold(filepath.Base(value), query) {
+		return -1
+	}
 	if strings.Contains(strings.ToLower(filepath.Base(value)), query) {
 		return 0
 	}

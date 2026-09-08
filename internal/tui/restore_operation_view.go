@@ -8,34 +8,39 @@ import (
 
 func (m Model) restoreTransactionPreview() string {
 	var files, bytes uint64
-	cross, ownership := false, false
 	for _, report := range m.restorePreflights {
 		files += uint64(report.Files)
 		bytes += report.BytesRequired
-		cross = cross || report.CrossFilesystem
-		ownership = ownership || report.OwnershipMappingNeeded
 	}
-	body := fmt.Sprintf("SELECTIVE RESTORE PREFLIGHT\n\nPaths          %d\nFiles          %d\nData           %s\nDestination    %s\nConflict       %s\nCross-device   %t\nOwnership map  %t\n\n",
-		len(m.restoreBasket), files, bytesText(bytes), m.restoreTargetMode, m.restoreConflict, cross, ownership)
+	body := fmt.Sprintf("RESTORE PREFLIGHT\n%d selected paths • %d files • %s\nDestination: %s • Conflict: %s\n\n", len(m.restoreBasket), files, bytesText(bytes), m.restoreTargetMode, m.restoreConflict)
+	rows := m.restorePreviewRows()
+	start, end := restoreWindow(m.restoreIndex, len(rows), max(1, m.restorePageSize()-2))
+	for i := start; i < end; i++ {
+		body += m.restoreRow(rows[i], i == m.restoreIndex) + "\n"
+	}
+	return body + "\n" + m.restoreRow(fmt.Sprintf("%d affected paths • ↑/↓ scroll • c conflicts • Enter confirm • Esc back", len(rows)), false)
+}
+
+func (m Model) restorePreviewRows() []string {
+	var rows []string
 	for _, plan := range m.restorePlans {
 		for _, item := range plan.Items {
-			body += fmt.Sprintf("%-8s %s  →  %s\n", shortID(plan.Snapshot), item.SourcePath, item.TargetPath)
+			date := ""
+			for _, point := range m.snapshots {
+				if point.ID == plan.Snapshot {
+					date = point.Time.Local().Format("2006-01-02 15:04")
+					break
+				}
+			}
+			rows = append(rows, fmt.Sprintf("PUT %s  %s → %s", date, item.SourcePath, item.TargetPath))
 		}
 	}
 	if m.restoreBundleMode == "exact" {
-		body += fmt.Sprintf("\nEXACT REWIND DELETIONS  %d\n", len(m.restoreBundleDeletes))
-		limit := max(4, m.height-19-len(m.restorePlans))
-		start := max(0, min(m.restoreIndex, max(0, len(m.restoreBundleDeletes)-limit)))
-		for index := start; index < len(m.restoreBundleDeletes) && index < start+limit; index++ {
-			prefix := "  "
-			if index == m.restoreIndex {
-				prefix = "> "
-			}
-			body += prefix + m.restoreBundleDeletes[index] + "\n"
+		for _, path := range m.restoreBundleDeletes {
+			rows = append(rows, "REMOVE "+path)
 		}
-		body += fmt.Sprintf("Showing %d–%d of %d; every deletion is available with ↑/↓.\n", min(len(m.restoreBundleDeletes), start+1), min(len(m.restoreBundleDeletes), start+limit), len(m.restoreBundleDeletes))
 	}
-	return body + "\n" + m.styles.help.Render("↑/↓ affected paths • c conflict policy • enter confirm • esc cancel")
+	return rows
 }
 
 func (m Model) restoreApplicationPreview() string {

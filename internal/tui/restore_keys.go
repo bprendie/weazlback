@@ -10,8 +10,14 @@ import (
 
 func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
-	if model, cmd, handled := m.restoreSessionKey(key); handled {
+	if model, cmd, handled := m.restoreSessionKey(key); handled && (!m.restoreTextFocused() || key == "ctrl+c") {
 		return model, cmd
+	}
+	if model, cmd, handled := m.restoreNavigationKey(msg); handled {
+		return model, cmd
+	}
+	if m.restoreStage == "browse" && m.restoreSearching {
+		return m.updateRestoreSearchKey(msg)
 	}
 	if m.restoreStage == "bundle-components" {
 		return m.updateBundleComponentsKey(key)
@@ -127,6 +133,10 @@ func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	if m.restoreStage == "transaction-preview" {
+		if key == "up" || key == "down" || key == "k" || key == "j" || key == "pgup" || key == "pgdown" || key == "home" || key == "end" {
+			m.restoreIndex = moveList(m.restoreIndex, len(m.restorePreviewRows()), max(1, m.restorePageSize()-2), key)
+			return m, nil
+		}
 		if m.restoreBundleMode == "exact" && (key == "up" || key == "k") {
 			m.restoreIndex = max(0, m.restoreIndex-1)
 			return m, nil
@@ -207,6 +217,14 @@ func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.workspace, m.status = "backup", "Backup Mode"
+			if m.catalogCancel != nil {
+				m.catalogCancel()
+			}
+			m.catalogRequest++
+			if m.searchCancel != nil {
+				m.searchCancel()
+			}
+			m.searchRequest++
 			m.mode, m.index, m.railFocused = m.backupMode, m.backupIndex, m.backupRailFocused
 			return m, nil
 		}
@@ -238,13 +256,6 @@ func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.restoreStage == "versions" {
-		if key == "esc" || key == "left" {
-			m.restoreStage, m.restoreVersionPath = "browse", ""
-			return m, nil
-		}
-		return m, nil
-	}
 	if m.restoreStage == "content-confirm" {
 		if key == "y" || key == "enter" {
 			m.restoreContentOpen = true
@@ -263,7 +274,7 @@ func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.restoreIndex = min(max(0, len(m.restoreVisible)-1), m.restoreIndex+1)
 		case "enter", "right":
 			if len(m.restoreVisible) > 0 {
-				m.restoreVersionPath, m.restoreStage = m.restoreVisible[m.restoreIndex].Path, "versions"
+				m.openRestoreVersions(m.restoreVisible[m.restoreIndex].Path)
 			}
 		case "esc", "left":
 			m.restoreStage, m.restoreContentQuery = "browse", ""
@@ -271,25 +282,7 @@ func (m Model) updateRestoreWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.restoreStage == "full" || m.restoreSearching {
-		if m.restoreSearching && key == "A" {
-			m.restoreAllMachines = !m.restoreAllMachines
-			m.restoreIndex = 0
-			m.filterRestore()
-			return m, nil
-		}
-		if m.restoreSearching && key == "H" && strings.HasPrefix(strings.TrimSpace(m.restoreInput.Value()), "p ") {
-			m.restorePathHistory = !m.restorePathHistory
-			m.restoreIndex = 0
-			m.filterRestore()
-			return m, nil
-		}
-		if m.restoreSearching && key == "esc" {
-			m.restoreSearching, m.restoreDeletedOnly = false, false
-			m.restoreInput.Blur()
-			m.filterRestore()
-			return m, nil
-		}
+	if m.restoreStage == "full" {
 		return m.updateRestore(msg)
 	}
 	if m.restoreStage != "browse" {

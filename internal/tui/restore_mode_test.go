@@ -91,6 +91,7 @@ func TestRestoreTreeNavigationAndDeduplicatedVersionSearch(t *testing.T) {
 	machine := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	m := Model{styles: newStyles(), workspace: "restore", mode: modeRestore, restoreStage: "browse",
 		cfg: config.Config{Machine: config.Machine{ID: machine}}, restoreBasket: map[string]restoreBasketItem{}, restoreTreePath: "/home/alice",
+		width: 100, height: 30,
 		restoreEntries:    []restic.FileEntry{{Path: "/home/alice/Code", Name: "Code", Type: "dir"}, {Path: "/home/alice/Code/app/main.go", Name: "main.go", Type: "file", Size: 10}},
 		restoreIdentities: []restic.Identity{{ID: machine, Name: "ThinkPad"}}, restoreCatalog: catalog.New()}
 	m.restoreCatalog.Paths["/home/alice/Code/app/main.go"] = &catalog.PathRecord{Path: "/home/alice/Code/app/main.go", Versions: []catalog.Version{
@@ -101,8 +102,8 @@ func TestRestoreTreeNavigationAndDeduplicatedVersionSearch(t *testing.T) {
 	// navigation keys before the backup workspace can consume them.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(Model)
-	if m.restoreTreePath != "/home/alice/Code" {
-		t.Fatalf("tree path=%q", m.restoreTreePath)
+	if !m.expanded["/home/alice/Code"] || len(m.restoreVisible) != 2 {
+		t.Fatalf("folder not expanded: %#v", m.restoreVisible)
 	}
 	updated, _ = m.updateRestoreWorkspaceKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m = updated.(Model)

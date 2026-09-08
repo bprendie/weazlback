@@ -10,6 +10,40 @@ import (
 
 func (m Model) updateRestoreMessage(message tea.Msg) (tea.Model, tea.Cmd, bool) {
 	switch msg := message.(type) {
+	case restoreLoadAuthMsg:
+		if msg.err != nil {
+			m.err = "System authorization cancelled; r retries, Esc returns"
+			m.restoreStage = "load-error"
+			return m, nil, true
+		}
+		m.restoreAuthorized = true
+		if msg.point {
+			next, cmd := m.loadRestorePoint(msg.index)
+			return next, cmd, true
+		}
+		next, cmd := m.startOrRunRestore()
+		return next, cmd, true
+	case restorePreflightAuthMsg:
+		if msg.err != nil {
+			m.err = "System authorization cancelled; retry or go back"
+			return m, nil, true
+		}
+		m.restoreAuthorized = true
+		next, cmd := m.startRestoreTransactionPreflight(msg.alternate)
+		return next, cmd, true
+	case restoreSearchMsg:
+		if msg.request != m.searchRequest || !m.restoreSearching || m.restoreStage != "browse" {
+			return m, nil, true
+		}
+		m.searchBusy = false
+		if msg.err != nil {
+			m.err = msg.err.Error()
+			return m, nil, true
+		}
+		m.restoreResults, m.restoreVisible, m.searchCount = msg.results, msg.files, msg.count
+		m.status, m.err = fmt.Sprintf("%d matching paths", msg.count), ""
+		m.restoreIndex = min(m.restoreIndex, max(0, max(len(msg.results), len(msg.files))-1))
+		return m, nil, true
 	case restoreApplicationPlanMsg:
 		if msg.err != nil {
 			m.err, m.status, m.restoreStage = msg.err.Error(), "application plan failed", "dashboard"
@@ -96,15 +130,21 @@ func (m Model) updateRestoreMessage(message tea.Msg) (tea.Model, tea.Cmd, bool) 
 		}
 		return m, nil, true
 	case restoreCatalogMsg:
-		m.restoreCatalog = msg.catalog
+		if msg.request != 0 && msg.request != m.catalogRequest {
+			return m, nil, true
+		}
 		if msg.err != nil {
-			m.restoreCatalogState, m.err = "catalog unavailable — selected-point browsing remains active", "history catalog: "+msg.err.Error()
+			m.restoreCatalogState = "History unavailable • current point searchable • Ctrl+R refresh"
 		} else {
-			m.restoreCatalogState = fmt.Sprintf("history catalog current • refreshed in %s", msg.elapsed.Round(time.Millisecond))
+			m.restoreCatalog = msg.catalog
+			m.restoreCatalogState = fmt.Sprintf("History loaded in %s • Ctrl+R refresh selected scope", msg.elapsed.Round(time.Millisecond))
 			if m.restoreDeletedOnly && len(m.snapshots) > 0 && m.restoreSnapshot < len(m.snapshots) {
 				m.restoreResults = deletedCatalogResults(m.restoreCatalog, m.restoreIdentities, m.restoreIdentity, m.snapshots[m.restoreSnapshot].Time)
 				m.restoreVisible = nil
-			} else {
+			} else if m.restoreSearching && m.restoreStage == "browse" {
+				next, cmd := m.queueRestoreSearch()
+				return next, cmd, true
+			} else if m.restoreStage == "browse" {
 				m.filterRestore()
 			}
 		}
