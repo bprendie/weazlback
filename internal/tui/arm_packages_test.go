@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/inventory"
@@ -18,6 +19,55 @@ import (
 	"github.com/bprendie/weazlback/internal/targetpackages"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+func TestARMAuthorizationKeepaliveStopsAndRetries(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := make(chan struct{}, 20)
+	stop := keepARMAuthorization(ctx, time.Millisecond, func(context.Context) error {
+		calls <- struct{}{}
+		return errors.New("expired timestamp")
+	})
+	defer stop()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-calls:
+		case <-time.After(time.Second):
+			t.Fatal("renewal did not continue after failure")
+		}
+	}
+	stop()
+	count := len(calls)
+	time.Sleep(10 * time.Millisecond)
+	if len(calls) != count {
+		t.Fatal("renewal continued after operation finished")
+	}
+}
+
+func TestARMAuthorizationKeepaliveCancelsInFlightRenewal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	stop := keepARMAuthorization(ctx, time.Millisecond, func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	defer stop()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("renewal never started")
+	}
+	cancel()
+	done := make(chan struct{})
+	go func() { stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled operation did not stop renewal")
+	}
+}
 
 func armEnvironmentFixture(t *testing.T, arch string) string {
 	t.Helper()

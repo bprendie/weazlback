@@ -239,6 +239,8 @@ func (m Model) beginARMCapture() (tea.Model, tea.Cmd) {
 	cfg := m.cfg
 	go func() {
 		defer close(events)
+		stopAuthorization := keepARMAuthorization(ctx, time.Minute, renewARMAuthorization)
+		defer stopAuthorization()
 		emit := func(lane string, p systemSnapshotLane) {
 			select {
 			case events <- armProgressMsg{lane, p, events}:
@@ -252,6 +254,39 @@ func (m Model) beginARMCapture() (tea.Model, tea.Cmd) {
 		events <- armDoneMsg{manifest, err}
 	}()
 	return m, waitARMEvent(events)
+}
+
+// Refresh only the existing sudo timestamp, without prompting or changing policy.
+// The interactive check before saving remains the fallback if renewal fails.
+func renewARMAuthorization(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "sudo", "-n", "-v").Run()
+}
+
+func keepARMAuthorization(parent context.Context, interval time.Duration, renew func(context.Context) error) func() {
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if ctx.Err() != nil {
+					return
+				}
+				_ = renew(ctx)
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 type armCaptureOperations struct {
