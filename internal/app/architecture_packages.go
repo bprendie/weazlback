@@ -107,7 +107,7 @@ func architecturePackages(ctx context.Context, args []string, stdout, stderr io.
 		if err := isolated.Initialize(); err != nil {
 			return err
 		}
-		return writeJSON(stdout, targetpackages.Resolve(manifest, env.Architecture, env.Fingerprint, isolated))
+		return writeJSON(stdout, targetpackages.ResolveEnvironment(manifest, env, isolated))
 	}
 	if action != "prepare" {
 		return fmt.Errorf("unknown architecture package action %q", action)

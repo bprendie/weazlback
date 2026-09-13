@@ -30,7 +30,7 @@ func Prepare(ctx context.Context, root, staging, machine string, source inventor
 			return empty(err)
 		}
 	}
-	plan := resolveWithProgress(source, env.Architecture, env.Fingerprint, run, progress)
+	plan := resolveWithProgress(source, env.Architecture, env.Fingerprint, run, progress, heldPackages(env.Config))
 	manifest := packagecapsule.Manifest{MachineID: machine, Architecture: env.Architecture, Platform: env.Platform, PackageFamily: "pacman", TargetFingerprint: env.Fingerprint, SourceInventoryDigest: plan.InventoryDigest, Flatpaks: source.PackagePlan.Flatpak}
 	manifest.ManualReview = append(manifest.ManualReview, plan.Review...)
 	for index, name := range plan.Official {

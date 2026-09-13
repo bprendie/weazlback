@@ -75,6 +75,8 @@ func TestARMSetupRemembersPrivateCopyAndRejectsX64(t *testing.T) {
 }
 
 func TestARMXUsesInAppSetupAndConsumesPathKeys(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("WEAZLBACK_OMA_SNAP", "")
 	m := Model{cfg: config.Default(), mode: modeProfiles, styles: newStyles()}
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
 	m = updated.(Model)
@@ -165,6 +167,8 @@ func TestARMResultPreservesNativeScheduleAndSystemSet(t *testing.T) {
 }
 
 func TestARMShortcutWorksWithEitherCaseAndFocus(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("WEAZLBACK_OMA_SNAP", "")
 	for _, key := range []rune{'x', 'X'} {
 		for _, rail := range []bool{false, true} {
 			m := Model{cfg: config.Default(), mode: modeProfiles, railFocused: rail, styles: newStyles()}
@@ -180,5 +184,32 @@ func TestARMShortcutWorksWithEitherCaseAndFocus(t *testing.T) {
 	got := updated.(Model)
 	if cmd != nil || got.armStage != "" || got.mode != modeProfiles || !strings.Contains(got.status, "wait for it to finish") {
 		t.Fatal("busy shortcut should explain why it cannot start")
+	}
+}
+
+func TestLocalOmaSnapAutoconfigurationSmoke(t *testing.T) {
+	project := os.Getenv("WEAZLBACK_TEST_OMA_SNAP")
+	if project == "" {
+		t.Skip("set WEAZLBACK_TEST_OMA_SNAP for local project integration")
+	}
+	t.Setenv("WEAZLBACK_OMA_SNAP", project)
+	t.Setenv("WEAZLBACK_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+	m := Model{cfg: config.Default(), mode: modeProfiles, styles: newStyles()}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(Model)
+	if m.armStage == "setup" || m.cfg.ARMTargetEnvironment == "" {
+		t.Fatalf("local profile did not bypass path prompt: %s", m.err)
+	}
+	if err := validateARMTarget(m.cfg.ARMTargetEnvironment); err != nil {
+		t.Fatal(err)
+	}
+	// The test vault is intentionally locked; import must complete before authorization.
+	if m.err != "vault is locked" {
+		t.Fatalf("unexpected next step: %s", m.err)
+	}
+	path, _ := config.Path()
+	saved, err := config.Load(path)
+	if err != nil || saved.ARMTargetEnvironment != m.cfg.ARMTargetEnvironment {
+		t.Fatalf("target was not remembered: %v", err)
 	}
 }

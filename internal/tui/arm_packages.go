@@ -39,7 +39,16 @@ func (m Model) architecturePackageUI() (tea.Model, tea.Cmd) {
 	}
 	m.err = ""
 	if m.cfg.ARMTargetEnvironment == "" {
-		return m.setupARMTarget()
+		found, err := m.rememberLocalARMTarget()
+		if err != nil {
+			next, cmd := m.setupARMTarget()
+			updated := next.(Model)
+			updated.err = "Could not load local oma_snap settings: " + err.Error()
+			return updated, cmd
+		}
+		if !found {
+			return m.setupARMTarget()
+		}
 	}
 	if err := validateARMTarget(m.cfg.ARMTargetEnvironment); err != nil {
 		next, cmd := m.setupARMTarget()
@@ -48,6 +57,36 @@ func (m Model) architecturePackageUI() (tea.Model, tea.Cmd) {
 		return updated, cmd
 	}
 	return m.authorizeARMCapture()
+}
+
+// Discover the user's local Snapdragon build without asking for an output path.
+func (m *Model) rememberLocalARMTarget() (bool, error) {
+	project := os.Getenv("WEAZLBACK_OMA_SNAP")
+	if project == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false, err
+		}
+		project = filepath.Join(home, "Code", "oma_snap")
+	}
+	if _, err := os.Stat(project); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	temporary, err := os.MkdirTemp("", "weazlback-snapdragon-settings-")
+	if err != nil {
+		return false, err
+	}
+	defer os.RemoveAll(temporary)
+	if err := targetpackages.ImportOmaSnap(project, temporary, packagecapsule.ExecRunner{Context: context.Background(), Quiet: true}); err != nil {
+		return false, err
+	}
+	if err := rememberARMTarget(temporary, &m.cfg); err != nil {
+		return false, err
+	}
+	m.status = "Snapdragon settings loaded from local oma_snap profile"
+	return true, nil
 }
 
 func validateARMTarget(root string) error {

@@ -82,3 +82,18 @@ func TestIsolatedRunnerNeverUsesHostDatabase(t *testing.T) {
 		t.Fatal(base.calls)
 	}
 }
+
+func TestTargetHoldsAndSnapdragonHardwareNeverResolveAsApplications(t *testing.T) {
+	run := &fakeRunner{values: map[string]string{"pacman -Qq": "", "pacman -Si -- editor": "Name : editor\nVersion : 2\nArchitecture : aarch64"}}
+	source := inventory.ApplicationManifest{PackagePlan: inventory.PackageRestorePlan{Official: []string{"hyprland", "hyprtoolkit", "hyprland-guiutils", "omarchy-settings", "oma-snap-boot", "oma-snap-camera-hp", "archlinuxarm-keyring", "glibc", "editor"}}}
+	env := Environment{Architecture: "aarch64", Fingerprint: "target", Config: "[options]\nIgnorePkg = hypr* omarchy-settings\nHoldPkg = glibc pacman\n"}
+	plan := ResolveEnvironment(source, env, run)
+	if strings.Join(plan.Official, ",") != "editor" || len(plan.Kept) != 8 || len(plan.Build) != 0 {
+		t.Fatalf("%+v", plan)
+	}
+	for _, call := range run.calls {
+		if strings.Contains(call, "-- hypr") || strings.Contains(call, "-- oma-snap") || strings.Contains(call, "-- glibc") || strings.Contains(call, "-- archlinuxarm") {
+			t.Fatal("queried held/hardware package:", call)
+		}
+	}
+}

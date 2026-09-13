@@ -44,8 +44,15 @@ Btrfs fast landing remains a Turbo prerequisite; qualification/fallback is repor
 ## Independent ARM package preparation
 
 **Apps → x (or Shift+X)** prepares ARM64 application packages inside the TUI. On first
-use, supply the settings folder exported from the Snapdragon PC. Weazlback keeps a
-private copy and remembers it. Subsequent runs capture the current source inventory,
+use, Weazlback discovers `~/Code/oma_snap` (override with `WEAZLBACK_OMA_SNAP`).
+It derives the online ARM repositories from `profiles/t14s-lcd/pacman.conf` and
+`mirrorlist`, and copies only public signing-key material from a local Snapdragon
+installer build. It preserves the profile’s `IgnorePkg`/`HoldPkg` rules and excludes
+Snapdragon hardware integration packages from application recovery. The installer’s
+offline-only repositories are not used for online application preparation.
+
+If that project is unavailable, supply a settings folder exported from the
+Snapdragon PC instead. Weazlback keeps a private copy and remembers it. Subsequent runs capture the current source inventory,
 download and verify ARM packages, and save an independent `packages-arm64` snapshot
 in the default repository. No output path or source inventory export is needed.
 

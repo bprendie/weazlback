@@ -32,7 +32,7 @@ func (r *Restore) configureNativePackages(ctx context.Context, snapshots []resti
 	if previous.Migration.Active && (previous.Migration.TargetArchitecture != r.Plan.Migration.TargetArchitecture || previous.Migration.TargetFingerprint != env.Fingerprint || previous.TargetHome != r.Plan.TargetHome) {
 		return fmt.Errorf("target architecture/platform changed since the saved plan; use a new restore workspace")
 	}
-	native := targetpackages.Resolve(*r.Plan.Applications, env.Architecture, env.Fingerprint, run)
+	native := targetpackages.ResolveEnvironment(*r.Plan.Applications, env, run)
 	if previous.NativePlan != nil {
 		if previous.NativePlan.InventoryDigest != native.InventoryDigest {
 			return fmt.Errorf("source application inventory changed since saved plan")

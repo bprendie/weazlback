@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,7 +31,7 @@ var safeName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9@._+:-]*$`)
 
 func SafeName(name string) bool { return safeName.MatchString(name) }
 func Hardware(name string) bool {
-	for _, prefix := range []string{"linux", "firmware", "nvidia", "intel-ucode", "amd-ucode", "grub", "systemd", "uboot", "u-boot", "qcom", "snapdragon", "mesa", "vulkan", "xf86-video", "mkinitcpio", "dracut", "pacman", "archlinux", "omarchy"} {
+	for _, prefix := range []string{"linux", "firmware", "nvidia", "intel-ucode", "amd-ucode", "grub", "systemd", "uboot", "u-boot", "qcom", "snapdragon", "mesa", "vulkan", "xf86-video", "mkinitcpio", "dracut", "pacman", "archlinux", "omarchy", "oma-snap", "archlinuxarm"} {
 		if name == prefix || strings.HasPrefix(name, prefix+"-") {
 			return true
 		}
@@ -50,10 +51,10 @@ func Digest(m inventory.ApplicationManifest) string {
 	return hex.EncodeToString(h[:])
 }
 func Resolve(m inventory.ApplicationManifest, arch, fingerprint string, run packagecapsule.Runner) Plan {
-	return resolveWithProgress(m, arch, fingerprint, run, nil)
+	return resolveWithProgress(m, arch, fingerprint, run, nil, nil)
 }
 
-func resolveWithProgress(m inventory.ApplicationManifest, arch, fingerprint string, run packagecapsule.Runner, progress func(packagecapsule.Progress)) Plan {
+func resolveWithProgress(m inventory.ApplicationManifest, arch, fingerprint string, run packagecapsule.Runner, progress func(packagecapsule.Progress), held []string) Plan {
 	p := Plan{Versions: map[string]string{}, Architecture: architecture.Package(arch), Fingerprint: fingerprint, InventoryDigest: Digest(m)}
 	installed, _ := run.Output("pacman", "-Qq")
 	have := map[string]bool{}
@@ -72,6 +73,10 @@ func resolveWithProgress(m inventory.ApplicationManifest, arch, fingerprint stri
 		seen[name] = true
 		if !SafeName(name) {
 			p.Review = append(p.Review, "invalid package name withheld")
+			continue
+		}
+		if matchesHeld(name, held) {
+			p.Kept = append(p.Kept, name+" (held by target policy)")
 			continue
 		}
 		if have[name] {
@@ -233,4 +238,29 @@ func rejectConflicts(run packagecapsule.Runner, meta map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// ResolveEnvironment applies the target's package holds during both preparation and restore.
+func ResolveEnvironment(m inventory.ApplicationManifest, env Environment, run packagecapsule.Runner) Plan {
+	return resolveWithProgress(m, env.Architecture, env.Fingerprint, run, nil, heldPackages(env.Config))
+}
+
+func heldPackages(config string) []string {
+	var held []string
+	for _, line := range strings.Split(config, "\n") {
+		line, _, _ = strings.Cut(line, "#")
+		key, value, ok := strings.Cut(line, "=")
+		if ok && (strings.TrimSpace(key) == "IgnorePkg" || strings.TrimSpace(key) == "HoldPkg") {
+			held = append(held, strings.Fields(value)...)
+		}
+	}
+	return held
+}
+func matchesHeld(name string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if matched, _ := filepath.Match(pattern, name); matched {
+			return true
+		}
+	}
+	return false
 }

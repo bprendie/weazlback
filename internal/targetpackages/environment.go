@@ -26,6 +26,10 @@ func CurrentEnvironment(run packagecapsule.Runner) (Environment, error) {
 	if err != nil {
 		return Environment{}, err
 	}
+	return environmentFromConfig(config, platform.Current(), architecture.Native()), nil
+}
+
+func environmentFromConfig(config string, identity platform.Identity, arch string) Environment {
 	// pacman-conf expands Include entries. Keep target repository and signature policy,
 	// discard machine-local state paths so an exported descriptor remains portable.
 	var lines []string
@@ -39,16 +43,18 @@ func CurrentEnvironment(run packagecapsule.Runner) (Environment, error) {
 		lines = append(lines, line)
 	}
 	config = strings.Join(lines, "\n")
-	identity := platform.Current()
-	arch := architecture.Native()
 	hash := sha256.Sum256([]byte(config + "\n" + identity.ID + "\n" + identity.Variant + "\n" + identity.Version + "\n" + arch))
-	return Environment{Architecture: arch, Platform: identity, Fingerprint: hex.EncodeToString(hash[:]), Config: config}, nil
+	return Environment{Architecture: arch, Platform: identity, Fingerprint: hex.EncodeToString(hash[:]), Config: config}
 }
 func ExportEnvironment(root string, run packagecapsule.Runner) error {
 	e, err := CurrentEnvironment(run)
 	if err != nil {
 		return err
 	}
+	return writeEnvironment(root, "/etc/pacman.d/gnupg", e)
+}
+
+func writeEnvironment(root, keyring string, e Environment) error {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return err
 	}
@@ -57,7 +63,7 @@ func ExportEnvironment(root string, run packagecapsule.Runner) error {
 		return err
 	}
 	for _, name := range []string{"pubring.gpg", "trustdb.gpg"} {
-		data, err := os.ReadFile(filepath.Join("/etc/pacman.d/gnupg", name))
+		data, err := os.ReadFile(filepath.Join(keyring, name))
 		if err != nil {
 			return err
 		}
