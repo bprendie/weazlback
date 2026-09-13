@@ -48,6 +48,9 @@ func tuneCommand(ctx context.Context, args []string, stdout, stderr io.Writer) e
 	if *connections > 0 {
 		destination.Connections = *connections
 	} else {
+		if err := authorizeDestination(*destination, stdout, stderr); err != nil {
+			return err
+		}
 		service := restic.NewService(stderr)
 		snapshots, err := service.SnapshotsForMachine(ctx, repo, cfg.Machine.ID)
 		if err != nil {
