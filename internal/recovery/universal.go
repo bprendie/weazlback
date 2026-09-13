@@ -170,6 +170,8 @@ From the root of this media, run:
 The launcher detects x64 or ARM64, verifies both architectures and shared assets,
 and starts native guided recovery with Turbo requested. Keep the vault passphrase
 available. The kit contains repository credentials, not the backed-up files.
+Guided recovery uses this media's active kit and reads current backup history
+from the selected repository. Kit updates are independent of System Sets.
 Missing native applications may download from the target repositories.
 
 CURRENT selects an immutable directory under payloads/. To verify it manually:

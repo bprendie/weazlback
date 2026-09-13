@@ -2,10 +2,10 @@ package recoverytui
 
 import (
 	"encoding/json"
-	"github.com/bprendie/weazlback/internal/recovery"
 	"os"
 	"path/filepath"
-	"sort"
+
+	"github.com/bprendie/weazlback/internal/recovery"
 )
 
 func recoveryMediaVersion() string {
@@ -39,10 +39,33 @@ func defaultKit(kits []string) string {
 }
 
 func discoverKits() []string {
+	// A launched recovery medium owns its kit. Payload revisions identify tool
+	// and credential updates, not backup generations; history is read live from
+	// the repository after unlocking this kit.
+	root := recovery.MediaRoot()
+	if active, err := recovery.ActiveMedia(root); err == nil {
+		root = active
+	}
+	canonical := filepath.Join(root, "weazlback-recovery.wzrk")
+	if info, err := os.Stat(canonical); err == nil && info.Mode().IsRegular() {
+		return []string{canonical}
+	}
+	// A missing kit on recognized media must not silently select another drive.
+	for _, marker := range []string{"CURRENT", "BUNDLE.json", "SHA256SUMS"} {
+		if _, err := os.Stat(filepath.Join(root, marker)); err == nil {
+			return []string{canonical}
+		}
+	}
 	seen, result := map[string]bool{}, []string{}
 	add := func(pattern string) {
 		matches, _ := filepath.Glob(pattern)
 		for _, path := range matches {
+			if filepath.Base(path)[0] == '.' {
+				continue
+			}
+			if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+				continue
+			}
 			absolute, _ := filepath.Abs(path)
 			if !seen[absolute] {
 				seen[absolute], result = true, append(result, absolute)
@@ -56,6 +79,5 @@ func discoverKits() []string {
 	add(filepath.Join(cwd, "*.wzrk"))
 	add("/mnt/*.wzrk")
 	add("/mnt/*/*.wzrk")
-	sort.Strings(result)
 	return result
 }
