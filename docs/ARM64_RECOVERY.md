@@ -68,6 +68,10 @@ entry instead of scanning the remainder of each archive.
 PACKAGES, AUR, and REPO use the same progress rails as System Set. Unavailable
 applications appear as review notes; source builds remain explicit. Enter refreshes
 the ARM capsule, T changes the remembered target settings, and Esc returns to Apps.
+Before saving the prepared capsule, Weazlback refreshes sudo authorization and
+prompts again if the original authorization expired during preparation. The
+prepared files remain available while that prompt is open.
+
 Ctrl+C cancels a running operation. Native package schedules and System Sets remain
 independent. The CLI workflow below remains available for exported snapshot inventories,
 availability inspection, explicit native source builds, verification, and import.

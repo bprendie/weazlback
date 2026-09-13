@@ -140,6 +140,11 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.armLanes[msg.lane] = msg.progress
 		m.status = "ARM64 " + msg.progress.State + " " + msg.progress.Current
 		return m, waitARMEvent(msg.events)
+	case armArchiveAuthMsg:
+		return m.authorizeARMArchive(msg)
+	case armArchiveAuthDoneMsg:
+		msg.request.reply <- msg.err
+		return m, waitARMEvent(msg.request.events)
 	case armDoneMsg:
 		return m.finishARMCapture(msg)
 	case packageDoneMsg:

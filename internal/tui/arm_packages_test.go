@@ -213,3 +213,77 @@ func TestLocalOmaSnapAutoconfigurationSmoke(t *testing.T) {
 		t.Fatalf("target was not remembered: %v", err)
 	}
 }
+
+func TestARMRefreshesAuthorizationAfterPreparationBeforeSaving(t *testing.T) {
+	for _, denied := range []bool{false, true} {
+		cfg := config.Default()
+		cfg.ARMTargetEnvironment = armEnvironmentFixture(t, "aarch64")
+		prepared := false
+		authorized := false
+		archived := false
+		cleaned := false
+		artifact := filepath.Join(t.TempDir(), "capsule-ready")
+		ops := armCaptureOperations{
+			inventory: func(context.Context) (inventory.ApplicationManifest, error) {
+				return inventory.ApplicationManifest{}, nil
+			},
+			prepare: func(context.Context, string, string, string, inventory.ApplicationManifest, bool, bool, func(packagecapsule.Progress)) (packagecapsule.Manifest, string, func(), error) {
+				prepared = true
+				if err := os.WriteFile(artifact, []byte("prepared"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				return packagecapsule.Manifest{}, filepath.Dir(artifact), func() { cleaned = true; os.Remove(artifact) }, nil
+			},
+			authorize: func(context.Context) error {
+				if !prepared || cleaned {
+					t.Fatal("reauthorized before preparation or after cleanup")
+				}
+				if _, err := os.Stat(artifact); err != nil {
+					t.Fatal("prepared capsule was lost while requesting authorization")
+				}
+				if denied {
+					return errors.New("password prompt cancelled")
+				}
+				authorized = true
+				return nil
+			},
+			archive: func(context.Context, restic.Repository, string, string, []string, func(restic.BackupProgress)) error {
+				if !authorized || cleaned {
+					t.Fatal("archived without refreshed authorization or lost staging")
+				}
+				archived = true
+				return nil
+			},
+		}
+		_, err := captureARMWith(context.Background(), cfg, t.TempDir(), restic.Repository{}, func() error { return nil }, func(string, systemSnapshotLane) {}, ops)
+		if (err != nil) != denied || archived == denied || !cleaned {
+			t.Fatalf("denied=%v err=%v archived=%v cleaned=%v", denied, err, archived, cleaned)
+		}
+	}
+}
+
+func TestARMArchiveAuthorizationWaitsForUIAndCancels(t *testing.T) {
+	for _, cancelled := range []bool{false, true} {
+		ctx, cancel := context.WithCancel(context.Background())
+		events := make(chan tea.Msg, 1)
+		done := make(chan error, 1)
+		go func() { done <- requestARMArchiveAuthorization(ctx, events) }()
+		request := (<-events).(armArchiveAuthMsg)
+		select {
+		case <-done:
+			t.Fatal("worker did not wait for authorization")
+		default:
+		}
+		if cancelled {
+			cancel()
+		}
+		m := Model{}
+		m.Update(armArchiveAuthDoneMsg{request: request})
+		err := <-done
+		// Cancellation and the buffered success reply may race; both terminate safely.
+		if !cancelled && err != nil {
+			t.Fatal(err)
+		}
+		cancel()
+	}
+}

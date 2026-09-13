@@ -245,7 +245,7 @@ func (m Model) beginARMCapture() (tea.Model, tea.Cmd) {
 			case <-ctx.Done():
 			}
 		}
-		manifest, err := runARMCapture(ctx, cfg, stage, repo, func() error { return verifyTUIRepositoryIdentity(ctx, &cfg, destination, repo) }, emit)
+		manifest, err := runARMCapture(ctx, cfg, stage, repo, func() error { return verifyTUIRepositoryIdentity(ctx, &cfg, destination, repo) }, emit, func(ctx context.Context) error { return requestARMArchiveAuthorization(ctx, events) })
 		if err == nil {
 			_ = catalog.Refresh(ctx, m.vault, destination.ID, repo, cfg.Machine.ID, "packages-arm64")
 		}
@@ -255,13 +255,15 @@ func (m Model) beginARMCapture() (tea.Model, tea.Cmd) {
 }
 
 type armCaptureOperations struct {
+	authorize func(context.Context) error
 	inventory func(context.Context) (inventory.ApplicationManifest, error)
 	prepare   func(context.Context, string, string, string, inventory.ApplicationManifest, bool, bool, func(packagecapsule.Progress)) (packagecapsule.Manifest, string, func(), error)
 	archive   func(context.Context, restic.Repository, string, string, []string, func(restic.BackupProgress)) error
 }
 
-func runARMCapture(ctx context.Context, cfg config.Config, stage string, repo restic.Repository, verify func() error, emit func(string, systemSnapshotLane)) (packagecapsule.Manifest, error) {
+func runARMCapture(ctx context.Context, cfg config.Config, stage string, repo restic.Repository, verify func() error, emit func(string, systemSnapshotLane), authorize func(context.Context) error) (packagecapsule.Manifest, error) {
 	return captureARMWith(ctx, cfg, stage, repo, verify, emit, armCaptureOperations{
+		authorize: authorize,
 		inventory: inventory.CaptureApplications,
 		prepare:   targetpackages.Prepare,
 		archive: func(ctx context.Context, repo restic.Repository, profile, machine string, paths []string, progress func(restic.BackupProgress)) error {
@@ -297,6 +299,15 @@ func captureARMWith(ctx context.Context, cfg config.Config, stage string, repo r
 	}
 	emit("packages", systemSnapshotLane{State: "prepared", Current: fmt.Sprintf("%d artifacts / %d exceptions", manifest.Summary.Captured, len(manifest.Exceptions)), Percent: 1})
 	emit("aur", systemSnapshotLane{State: "review", Current: fmt.Sprintf("%d review notes; native source builds remain manual", len(manifest.ManualReview))})
+	if ops.authorize != nil {
+		emit("repository", systemSnapshotLane{State: "authorizing", Current: "confirming permission to save the prepared capsule"})
+		if err := ops.authorize(ctx); err != nil {
+			return manifest, fmt.Errorf("authorize ARM64 repository save: %w", err)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return manifest, err
+	}
 	emit("repository", systemSnapshotLane{State: "archiving", Current: "saving packages-arm64"})
 	archiveStart := time.Now()
 	err = ops.archive(ctx, repo, "packages-arm64", cfg.Machine.ID, []string{root}, func(p restic.BackupProgress) {
@@ -381,4 +392,36 @@ func nonnegativeARMBytes(n int64) uint64 {
 		return 0
 	}
 	return uint64(n)
+}
+
+// Keep the worker and its prepared artifacts alive while Bubble Tea temporarily
+// hands the terminal to sudo. The reply is buffered so cancellation cannot strand
+// the UI callback.
+type armArchiveAuthMsg struct {
+	reply  chan error
+	events chan tea.Msg
+}
+type armArchiveAuthDoneMsg struct {
+	request armArchiveAuthMsg
+	err     error
+}
+
+func requestARMArchiveAuthorization(ctx context.Context, events chan tea.Msg) error {
+	request := armArchiveAuthMsg{reply: make(chan error, 1), events: events}
+	select {
+	case events <- request:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-request.reply:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (m Model) authorizeARMArchive(request armArchiveAuthMsg) (tea.Model, tea.Cmd) {
+	m.status = "authorize saving the prepared ARM64 capsule"
+	return m, tea.ExecProcess(exec.Command("sudo", "-v"), func(err error) tea.Msg { return armArchiveAuthDoneMsg{request: request, err: err} })
 }
