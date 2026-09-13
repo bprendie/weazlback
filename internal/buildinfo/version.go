@@ -1,3 +1,3 @@
 package buildinfo
 
-const Version = "1.1.0-dev.arm64.1"
+const Version = "1.1.0-dev.arm64.2"

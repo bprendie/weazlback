@@ -18,6 +18,11 @@ cross-compilation is not a real-device acceptance result.
 `linux-universal` archive. Installing that archive installs the native pair and
 retains the universal bundle for later kit preparation/refresh.
 
+In the TUI, **k → Prepare USB / recovery folder** uses the matching installed
+universal bundle and includes both architectures. Preparation stops if that bundle
+is missing or fails validation. For a development build, set
+`WEAZLBACK_BUNDLE_DIR` to the complete matching bundle directory.
+
 Media stores immutable `payloads/kit-*` generations and an atomically replaced
 `CURRENT` pointer. Both architectures, runtime assets, and the encrypted recovery
 envelope are verified before a new generation becomes active. Failed refreshes

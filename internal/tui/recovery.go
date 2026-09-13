@@ -3,10 +3,10 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/bprendie/weazlback/internal/buildinfo"
 	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/recovery"
 	"github.com/bprendie/weazlback/internal/vault"
@@ -89,6 +89,19 @@ func (m Model) exportRecovery() (tea.Model, tea.Cmd) {
 	prepare := m.recoveryPrepare
 	m.busy, m.status, m.err = true, "encrypting recovery kit", ""
 	return m, func() tea.Msg {
+		defer func() {
+			for i := range passphrase {
+				passphrase[i] = 0
+			}
+		}()
+		var bundle string
+		if prepare {
+			var err error
+			bundle, err = recovery.InstalledBundle(buildinfo.Version)
+			if err != nil {
+				return recoveryDoneMsg{err: err}
+			}
+		}
 		cfgPath, err := config.Path()
 		if err != nil {
 			return recoveryDoneMsg{err: err}
@@ -125,26 +138,12 @@ func (m Model) exportRecovery() (tea.Model, tea.Cmd) {
 			defer os.Remove(kitOutput)
 		}
 		err = recovery.Export(kitOutput, recovery.Sources{Vault: vaultPath, Config: cfgPath, KnownHosts: knownHosts}, passphrase)
-		defer func() {
-			for i := range passphrase {
-				passphrase[i] = 0
-			}
-		}()
 		if err != nil || !prepare {
 			return recoveryDoneMsg{path: output, err: err}
 		}
-		executable, err := os.Executable()
-		if err == nil {
-			err = recovery.PrepareMedia(output, recovery.MediaSources{Weazlback: executable,
-				Restore: filepath.Join(filepath.Dir(executable), "weazlback-restore"), Kit: kitOutput, Restic: commandPath("restic")})
-		}
+		err = recovery.PrepareUniversal(output, bundle, kitOutput, buildinfo.Version)
 		return recoveryDoneMsg{path: output, prepared: true, err: err}
 	}
-}
-
-func commandPath(name string) string {
-	path, _ := exec.LookPath(name)
-	return path
 }
 
 func (m Model) recoveryScreen() string {

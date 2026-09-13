@@ -85,7 +85,9 @@ install_widget
 
 if [[ -f "$REPO_ROOT/BUNDLE.json" ]]; then
   mkdir -p "$INSTALL_ROOT/recovery-bundle"
-  cp -a "$REPO_ROOT/BUNDLE.json" "$REPO_ROOT/linux-amd64" "$REPO_ROOT/linux-arm64" "$INSTALL_ROOT/recovery-bundle/"
+  cp -a "$REPO_ROOT/BUNDLE.json" "$REPO_ROOT/linux-amd64" "$REPO_ROOT/linux-arm64" \
+    "$REPO_ROOT/scripts" "$REPO_ROOT/systemd" "$REPO_ROOT/widget" \
+    "$REPO_ROOT/manifest.json" "$REPO_ROOT/BarWidget.qml" "$INSTALL_ROOT/recovery-bundle/"
 fi
 
 install_schedule() {

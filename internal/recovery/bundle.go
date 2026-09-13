@@ -21,6 +21,38 @@ var BundleArchitectures = []string{"amd64", "arm64"}
 var BundleRuntime = []string{"scripts/install.sh", "scripts/launch.sh", "scripts/uninstall.sh", "scripts/weazlback-session", "systemd/weazlback-backup.service", "systemd/weazlback-backup.timer", "manifest.json", "BarWidget.qml", "widget/weazlback/Model.js", "widget/weazlback/BarWidget.qml", "widget/weazlback/Panel.qml", "widget/weazlback/Lane.qml"}
 var BundleTools = []string{"weazlback", "weazlback-restore", "restic"}
 
+// InstalledBundle locates and validates the universal payload used by USB preparation.
+func InstalledBundle(version string) (string, error) {
+	if root := os.Getenv("WEAZLBACK_BUNDLE_DIR"); root != "" {
+		_, err := ValidateBundle(root, version)
+		return root, err
+	}
+	var candidates []string
+	if executable, err := os.Executable(); err == nil {
+		parent := filepath.Dir(filepath.Dir(executable))
+		candidates = append(candidates, filepath.Join(parent, "recovery-bundle"), parent)
+	}
+	root := os.Getenv("WEAZLBACK_HOME")
+	if root == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			root = filepath.Join(home, ".weazlback")
+		}
+	}
+	if root != "" {
+		candidates = append(candidates, filepath.Join(root, "recovery-bundle"))
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(filepath.Join(candidate, BundleManifestName)); err != nil {
+			continue
+		}
+		if _, err := ValidateBundle(candidate, version); err != nil {
+			return "", fmt.Errorf("invalid universal recovery bundle %s: %w", candidate, err)
+		}
+		return candidate, nil
+	}
+	return "", fmt.Errorf("universal recovery bundle for %s is missing; install the universal release or set WEAZLBACK_BUNDLE_DIR", version)
+}
+
 func ValidateBundle(root, version string) (BundleManifest, error) {
 	var m BundleManifest
 	data, err := os.ReadFile(filepath.Join(root, BundleManifestName))
