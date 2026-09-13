@@ -130,3 +130,75 @@ func TestDownloadPlanRejectsUnsafePathsAndSizes(t *testing.T) {
 		}
 	}
 }
+
+type splittingRunner struct {
+	t         *testing.T
+	root      string
+	downloads [][]string
+}
+
+func (r *splittingRunner) Output(name string, args ...string) (string, error) {
+	index := 0
+	for i, arg := range args {
+		if arg == "--" {
+			index = i + 1
+			break
+		}
+	}
+	names := args[index:]
+	for _, pkg := range names {
+		if pkg == "broken" {
+			return ":: unavailable dependency required by broken", errors.New("cannot satisfy dependencies")
+		}
+	}
+	var lines []string
+	for _, pkg := range names {
+		lines = append(lines, pkg+"-1-1-aarch64.pkg.tar.zst 8")
+	}
+	lines = append(lines, "shared-1-1-aarch64.pkg.tar.zst 8")
+	return strings.Join(lines, "\n"), nil
+}
+func (r *splittingRunner) Run(name string, args ...string) error {
+	index := 0
+	for i, arg := range args {
+		if arg == "--" {
+			index = i + 1
+			break
+		}
+	}
+	names := append([]string(nil), args[index:]...)
+	r.downloads = append(r.downloads, names)
+	for _, pkg := range append(names, "shared") {
+		if pkg == "broken" {
+			r.t.Fatal("attempted unsatisfiable download")
+		}
+		if err := os.WriteFile(filepath.Join(r.root, "cache", pkg+"-1-1-aarch64.pkg.tar.zst"), []byte("complete"), 0600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (r *splittingRunner) RunDir(string, string, ...string) error {
+	r.t.Fatal("unexpected build")
+	return nil
+}
+
+func TestUnsatisfiableApplicationDoesNotBlockOtherDownloads(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "cache"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	base := &splittingRunner{t: t, root: root}
+	run := IsolatedRunner{Base: base, Root: root, Environment: Environment{Architecture: "aarch64"}}
+	var last packagecapsule.Progress
+	err := downloadOfficial(context.Background(), run, []string{"alpha", "broken", "beta", "gamma"}, func(p packagecapsule.Progress) { last = p })
+	if err == nil || !strings.Contains(err.Error(), "broken") || !strings.Contains(err.Error(), "unavailable dependency") {
+		t.Fatalf("missing failure details: %v", err)
+	}
+	if len(base.downloads) != 2 || strings.Join(base.downloads[0], ",") != "alpha" || strings.Join(base.downloads[1], ",") != "beta,gamma" {
+		t.Fatalf("groups: %v", base.downloads)
+	}
+	if last.Completed != 4 || last.Total != 4 || last.Bytes != 32 {
+		t.Fatalf("shared dependencies not aggregated correctly: %+v", last)
+	}
+}

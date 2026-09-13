@@ -14,11 +14,11 @@ type artifactMetadata struct {
 }
 
 func inspectArtifact(run Runner, path string) (artifactMetadata, string, error) {
-	pkginfo, err := run.Output("bsdtar", "-xOf", path, ".PKGINFO")
+	pkginfo, err := run.Output("bsdtar", "-xqOf", path, ".PKGINFO")
 	if err != nil {
 		return artifactMetadata{}, "", fmt.Errorf("read .PKGINFO: %w", err)
 	}
-	buildinfo, _ := run.Output("bsdtar", "-xOf", path, ".BUILDINFO")
+	buildinfo, _ := run.Output("bsdtar", "-xqOf", path, ".BUILDINFO")
 	meta := parsePackageInfo(pkginfo)
 	meta.Raw = pkginfo
 	if meta.Name == "" || meta.Version == "" || meta.Architecture == "" {

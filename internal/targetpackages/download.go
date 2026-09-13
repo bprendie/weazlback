@@ -2,6 +2,7 @@ package targetpackages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,7 +61,7 @@ func parseDownloadFiles(output string) ([]downloadFile, error) {
 	return files, nil
 }
 
-// Pacman owns one dependency transaction and its lock; libalpm runs the three
+// Pacman owns each dependency transaction and its lock; libalpm runs the three
 // download streams. Starting several pacman processes against one DB/cache races
 // their locks and shared dependency downloads.
 func downloadOfficial(ctx context.Context, run IsolatedRunner, names []string, progress func(packagecapsule.Progress)) error {
@@ -73,11 +74,7 @@ func downloadOfficial(ctx context.Context, run IsolatedRunner, names []string, p
 	if progress != nil {
 		progress(packagecapsule.Progress{Phase: "download", Source: "official", Package: "planning package and dependency downloads"})
 	}
-	output, err := run.Output("pacman", append([]string{"-Sp", "--noconfirm", "--print-format", "%f %s", "--"}, names...)...)
-	if err != nil {
-		return fmt.Errorf("plan ARM package downloads: %w", err)
-	}
-	files, err := parseDownloadFiles(output)
+	groups, files, failures, err := planDownloadGroups(ctx, run, names, progress)
 	if err != nil {
 		return err
 	}
@@ -97,29 +94,96 @@ func downloadOfficial(ctx context.Context, run IsolatedRunner, names []string, p
 		previous, previousTime = value, now
 	}
 	report()
-	done := make(chan error, 1)
-	go func() {
-		done <- run.Run("pacman", append([]string{"-Sw", "--noconfirm", "--noprogressbar", "--"}, names...)...)
-	}()
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case err := <-done:
-			report()
+	for _, group := range groups {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		done := make(chan error, 1)
+		go func(names []string) {
+			done <- run.Run("pacman", append([]string{"-Sw", "--noconfirm", "--noprogressbar", "--"}, names...)...)
+		}(group)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		finished := false
+		for !finished {
+			select {
+			case err := <-done:
+				report()
+				if ctx.Err() != nil {
+					ticker.Stop()
+					return ctx.Err()
+				}
+				if err != nil {
+					failures = append(failures, err)
+				}
+				finished = true
+			case <-ticker.C:
+				report()
+			case <-ctx.Done():
+				<-done
+				ticker.Stop()
+				return ctx.Err()
+			}
+		}
+		ticker.Stop()
+	}
+	return errors.Join(failures...)
+}
+
+// Some applications have mutually incompatible dependency closures in ARM repos.
+// Split a rejected transaction until compatible groups (or individual failures)
+// are identified. Pacman still checks every group's dependencies and signatures.
+func planDownloadGroups(ctx context.Context, run IsolatedRunner, names []string, progress func(packagecapsule.Progress)) ([][]string, []downloadFile, []error, error) {
+	var groups [][]string
+	var files []downloadFile
+	var failures []error
+	seen := map[string]bool{}
+	completed := 0
+	var visit func([]string) error
+	visit = func(group []string) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if progress != nil {
+			progress(packagecapsule.Progress{Phase: "planning downloads", Source: "official", Package: fmt.Sprintf("checking dependencies for %d applications", len(group)), Completed: completed, Total: len(names)})
+		}
+		output, err := run.Output("pacman", append([]string{"-Sp", "--noconfirm", "--print-format", "%f %s", "--"}, group...)...)
+		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return err
-		case <-ticker.C:
-			report()
-		case <-ctx.Done():
-			// ExecRunner uses the same context. Wait for pacman to stop before capture
-			// or cleanup can use files it might still be writing.
-			<-done
-			return ctx.Err()
+			if len(group) > 1 {
+				middle := len(group) / 2
+				if err := visit(group[:middle]); err != nil {
+					return err
+				}
+				return visit(group[middle:])
+			}
+			detail := strings.TrimSpace(output)
+			if len(detail) > 2048 {
+				detail = detail[len(detail)-2048:]
+			}
+			failures = append(failures, fmt.Errorf("%s: %w %s", group[0], err, detail))
+			completed++
+			return nil
 		}
+		planned, err := parseDownloadFiles(output)
+		if err != nil {
+			return err
+		}
+		groups = append(groups, append([]string(nil), group...))
+		for _, file := range planned {
+			if !seen[file.name] {
+				files = append(files, file)
+				seen[file.name] = true
+			}
+		}
+		completed += len(group)
+		return nil
 	}
+	if err := visit(names); err != nil {
+		return nil, nil, nil, err
+	}
+	return groups, files, failures, nil
 }
 
 func downloadProgress(cache string, files []downloadFile) packagecapsule.Progress {
@@ -147,6 +211,8 @@ func downloadProgress(cache string, files []downloadFile) packagecapsule.Progres
 	p.Package = fmt.Sprintf("%d download streams", ARMParallelDownloads)
 	if len(active) > 0 {
 		p.Package += " • " + strings.Join(active, ", ")
+	} else if p.Total == 0 {
+		p.Package = "no compatible download groups; checking cached packages"
 	} else if p.Completed == p.Total {
 		p.Package = "downloads present; checking package integrity"
 	}

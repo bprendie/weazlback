@@ -42,6 +42,7 @@ func Prepare(ctx context.Context, root, staging, machine string, source inventor
 				return empty(ctx.Err())
 			}
 			manifest.Exceptions = append(manifest.Exceptions, packagecapsule.Exception{Code: "download-failed", Detail: err.Error()})
+			manifest.ManualReview = append(manifest.ManualReview, "Some applications could not download; the capsule records their dependency/download errors and missing artifacts.")
 		}
 	}
 	roots := []string{filepath.Join(root, "cache")}

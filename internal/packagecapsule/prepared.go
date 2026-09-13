@@ -31,24 +31,32 @@ func PrepareArtifacts(options Options, manifest Manifest) (Manifest, string, fun
 	for _, pkg := range manifest.Packages {
 		wanted[pkg.Name] = pkg
 	}
+	var archives []string
 	for _, cache := range options.ArtifactRoots {
 		paths, _ := filepath.Glob(filepath.Join(cache, "*.pkg.tar.*"))
 		for _, path := range paths {
-			if strings.HasSuffix(path, ".sig") {
-				continue
-			}
-			meta, build, err := inspectArtifact(options.Run, path)
-			if err != nil {
-				continue
-			}
-			if ok, _ := compatibleFor(meta, build, manifest.Architecture); !ok {
-				continue
-			}
-			if _, ok := wanted[meta.Name]; !ok {
-				wanted[meta.Name] = Package{Name: meta.Name, Installed: meta.Version, Source: "official", Reason: "dependency"}
+			if !strings.HasSuffix(path, ".sig") && !strings.HasSuffix(path, ".part") {
+				archives = append(archives, path)
 			}
 		}
 	}
+	for index, path := range archives {
+		if err := options.Context.Err(); err != nil {
+			return fail(err)
+		}
+		emit(options, Progress{Phase: "inspect cache", Source: "official", Package: filepath.Base(path), Completed: index, Total: len(archives)})
+		meta, build, err := inspectArtifact(options.Run, path)
+		if err != nil {
+			continue
+		}
+		if ok, _ := compatibleFor(meta, build, manifest.Architecture); !ok {
+			continue
+		}
+		if _, ok := wanted[meta.Name]; !ok {
+			wanted[meta.Name] = Package{Name: meta.Name, Installed: meta.Version, Source: "official", Reason: "dependency"}
+		}
+	}
+	emit(options, Progress{Phase: "inspect cache", Source: "official", Completed: len(archives), Total: len(archives), Package: "package metadata inspected"})
 	manifest.Packages = nil
 	for _, pkg := range wanted {
 		manifest.Packages = append(manifest.Packages, pkg)
