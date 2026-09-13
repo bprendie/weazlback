@@ -2,6 +2,7 @@ package freshrestore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/bprendie/weazlback/internal/packagecapsule"
 	"github.com/bprendie/weazlback/internal/restic"
+	"github.com/bprendie/weazlback/internal/targetpackages"
 )
 
 func (r *Restore) reconcilePackageCapsule(ctx context.Context) (installed, fallback, failures []string) {
@@ -42,6 +44,15 @@ func (r *Restore) installVerifiedCapsule(ctx context.Context, files map[string]s
 		args = append(args, path)
 	}
 	var installErr error
+	if r.Plan.Migration.Active {
+		selectedFiles := map[string]string{}
+		for _, item := range items {
+			selectedFiles[item.Name] = files[item.Name]
+		}
+		if err := targetpackages.CheckLocalTransaction(packagecapsule.ExecRunner{Context: ctx, Quiet: true}, selectedFiles); err != nil {
+			return nil, r.fallbackAllCapsulePackages(), []string{err.Error()}
+		}
+	}
 	if r.Options.Progress != nil {
 		names := make([]string, 0, len(items))
 		for _, item := range items {
@@ -74,8 +85,29 @@ func (r *Restore) stagePackageCapsule(ctx context.Context) (map[string]string, e
 		return nil, err
 	}
 	root := filepath.Dir(r.Plan.PackageManifestPath)
+	includes := []string{root}
+	var selectedNames []string
+	if r.Plan.Migration.Active {
+		includes = []string{r.Plan.PackageManifestPath}
+		for _, item := range r.Plan.PackageDelta.Local {
+			selectedNames = append(selectedNames, item.Name)
+		}
+		selected, err := packagecapsule.SelectedManifest(*r.Plan.PackageCapsule, selectedNames)
+		if err != nil {
+			return nil, err
+		}
+		for _, pkg := range selected.Packages {
+			if !filepath.IsLocal(pkg.Artifact) || (pkg.Signature != "" && !filepath.IsLocal(pkg.Signature)) {
+				return nil, fmt.Errorf("unsafe selected artifact path")
+			}
+			includes = append(includes, filepath.Join(root, pkg.Artifact))
+			if pkg.Signature != "" {
+				includes = append(includes, filepath.Join(root, pkg.Signature))
+			}
+		}
+	}
 	started := time.Now()
-	err := r.service.RestoreWithProgress(ctx, r.Session.Repository, r.Plan.PackageSnapshot.ID, target, []string{root}, func(value restic.RestoreProgress) {
+	err := r.service.RestoreWithProgress(ctx, r.Session.Repository, r.Plan.PackageSnapshot.ID, target, includes, func(value restic.RestoreProgress) {
 		total, completed := int(value.TotalFiles), int(value.FilesRestored)
 		if value.MessageType == "summary" && total > 0 {
 			completed = total
@@ -91,12 +123,27 @@ func (r *Restore) stagePackageCapsule(ctx context.Context) (map[string]string, e
 		return nil, err
 	}
 	stagedRoot := stagedPath(target, root)
-	manifest, err := packagecapsule.Load(stagedRoot)
+	data, err := os.ReadFile(filepath.Join(stagedRoot, packagecapsule.ManifestName))
+	if err != nil {
+		return nil, err
+	}
+	manifest, err := packagecapsule.Parse(data)
 	if err != nil {
 		return nil, err
 	}
 	if !manifest.CapturedAt.Equal(r.Plan.PackageCapsule.CapturedAt) || manifest.MachineID != r.Plan.PackageCapsule.MachineID {
 		return nil, fmt.Errorf("restored Package Capsule does not match the planned manifest")
+	}
+	planned, _ := json.Marshal(r.Plan.PackageCapsule)
+	actual, _ := json.Marshal(&manifest)
+	if string(planned) != string(actual) {
+		return nil, fmt.Errorf("restored capsule ledger changed since planning")
+	}
+	if r.Plan.Migration.Active {
+		manifest, err = packagecapsule.SelectedManifest(manifest, selectedNames)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return packagecapsule.VerifyArtifacts(stagedRoot, manifest, packagecapsule.ExecRunner{Context: ctx, Quiet: true})
 }
@@ -105,7 +152,9 @@ func (r *Restore) fallbackAllCapsulePackages() []string {
 	var names []string
 	for _, item := range r.Plan.PackageDelta.Local {
 		names = append(names, item.Name)
-		if item.Source == "official" {
+		if r.Plan.Migration.Active && item.Source != "official" {
+			r.Plan.PackageReview = append(r.Plan.PackageReview, item.Name+": prepared native build failed; source rebuild requires an explicit action")
+		} else if item.Source == "official" {
 			r.Plan.Official = appendUniqueStrings(r.Plan.Official, item.Name)
 		} else {
 			r.Plan.AUR = appendUniqueStrings(r.Plan.AUR, item.Name)

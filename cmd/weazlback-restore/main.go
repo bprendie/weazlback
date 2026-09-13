@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/bprendie/weazlback/internal/buildinfo"
@@ -39,9 +40,9 @@ func main() {
 				return
 			}
 		}
-		kit := filepath.Join(filepath.Dir(os.Args[0]), "weazlback-recovery.wzrk")
-		if _, err := os.Stat(filepath.Join(filepath.Dir(os.Args[0]), "SHA256SUMS")); err == nil {
-			if err := recovery.VerifyMediaDirectory(filepath.Dir(os.Args[0])); err != nil {
+		kit := filepath.Join(recovery.MediaRoot(), "weazlback-recovery.wzrk")
+		if _, err := os.Stat(filepath.Join(recovery.MediaRoot(), "SHA256SUMS")); err == nil {
+			if err := recovery.VerifyMediaDirectory(recovery.MediaRoot()); err != nil {
 				fatal(err)
 			}
 		}
@@ -68,7 +69,7 @@ func main() {
 	repository := flag.String("repository", "", "override the local repository mount path")
 	adoptLocal := flag.Bool("adopt-local-repository", false, "use sudo to adopt the exact local repository for this user")
 	adoptIdentity := flag.Bool("adopt-source-identity", false, "make this replacement system continue the selected source machine identity")
-	engine := flag.String("engine", "standard", "recovery engine: standard or turbo")
+	engine := flag.String("engine", defaultEngine(), "recovery engine: standard or turbo")
 	turboMemory := flag.Int("turbo-memory-percent", 70, "Turbo memory ceiling as a percentage of available memory (10-70)")
 	turboBreakGlass := flag.Bool("turbo-break-glass", false, "accept documented soft Turbo qualification findings")
 	turboRecompress := flag.Bool("turbo-recompress", false, "recompress placed Btrfs files with zstd:1 after durability")
@@ -164,7 +165,7 @@ func attachRecoverySession() (bool, error) {
 	if output, err := exec.Command("tmux", "display-message", "-p", "-t", "weazlback-restore", "#{pane_dead}").Output(); err == nil && strings.TrimSpace(string(output)) == "1" {
 		_ = exec.Command("tmux", "kill-session", "-t", "weazlback-restore").Run()
 	}
-	command := exec.Command("tmux", "new-session", "-A", "-s", "weazlback-restore", "env", "WEAZLBACK_RESTORE_SESSION=1", binary)
+	command := exec.Command("tmux", "new-session", "-A", "-s", "weazlback-restore", "env", "WEAZLBACK_RESTORE_SESSION=1", "WEAZLBACK_MEDIA_ROOT="+recovery.MediaRoot(), "WEAZLBACK_RESTORE_ENGINE="+defaultEngine(), "PATH="+os.Getenv("PATH"), binary)
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return true, command.Run()
 }
@@ -236,7 +237,19 @@ func recoveryNuke(kitPath string, passphrase []byte, keysOnly, removeDirectory b
 	return command.Run()
 }
 
+func defaultEngine() string {
+	if os.Getenv("WEAZLBACK_RESTORE_ENGINE") == "turbo" {
+		return "turbo"
+	}
+	return "standard"
+}
+
 func ensureRestic(recoveryPath string) error {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(recoveryPath), "BUNDLE.json")); err == nil {
+		if err := recovery.VerifyMediaDirectory(filepath.Dir(recoveryPath)); err != nil {
+			return err
+		}
+	}
 	if _, err := exec.LookPath("restic"); err == nil {
 		return nil
 	}
@@ -256,6 +269,10 @@ func ensureRestic(recoveryPath string) error {
 
 func bundledRestic(recoveryPath string) (string, bool) {
 	bundled := filepath.Join(filepath.Dir(recoveryPath), "restic")
+	native := filepath.Join(filepath.Dir(recoveryPath), "linux-"+runtime.GOARCH, "restic")
+	if _, err := os.Stat(native); err == nil {
+		bundled = native
+	}
 	info, err := os.Stat(bundled)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
 		return "", false

@@ -14,14 +14,15 @@ import (
 )
 
 type Restore struct {
-	Options         Options
-	Session         *Session
-	Plan            Plan
-	Journal         Journal
-	JournalPath     string
-	StageDir        string
-	PackageStageDir string
-	service         restic.Service
+	MigrationWithheld []string
+	Options           Options
+	Session           *Session
+	Plan              Plan
+	Journal           Journal
+	JournalPath       string
+	StageDir          string
+	PackageStageDir   string
+	service           restic.Service
 }
 
 func Prepare(ctx context.Context, options Options) (*Restore, error) {
@@ -189,6 +190,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		targetPlatform = *options.TargetPlatform
 	}
 	r.Plan.SourcePlatform, r.Plan.TargetPlatform = manifest.Platform, targetPlatform
+	r.Plan.Migration = migrationPolicy(manifest.Platform.Architecture, targetPlatform.Architecture)
 	r.Plan.ScopeDecision = PlanScope(options.Scope, manifest.Platform, targetPlatform, manifest.CoreClaims)
 	r.Plan.SourceHostname = manifest.Hostname
 	r.Plan.Hostname, err = ResolveHostname(options.Hostname, manifest.Hostname)
@@ -209,7 +211,7 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 			r.Plan.Flatpak = nil
 		}
 	}
-	if r.Plan.PackageSnapshot != nil {
+	if r.Plan.PackageSnapshot != nil && !r.Plan.Migration.Active {
 		capsule, manifestPath, capsuleErr := r.loadPackageCapsule(ctx)
 		if capsuleErr != nil {
 			r.Close()
@@ -231,6 +233,10 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 	}
 	if r.Plan.ScopeDecision.IncludeCore {
 		r.Plan.LocalApps = append([]string(nil), manifest.WeazlApps...)
+	}
+	if err := r.configureNativePackages(ctx, snapshots); err != nil {
+		r.Close()
+		return nil, err
 	}
 	r.JournalPath = filepath.Join(options.WorkDir, session.Destination.ID+"-"+options.Scope+"-journal.json")
 	r.StageDir = filepath.Join(options.WorkDir, session.Destination.ID+"-"+options.Scope+"-stage")
@@ -283,6 +289,8 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 			r.Journal.PackageSnapshotID = r.Plan.PackageSnapshot.ID
 		}
 		r.Journal.ScopeDecision = r.Plan.ScopeDecision
+		r.Journal.Migration = r.Plan.Migration
+		r.Journal.NativePlan = r.Plan.NativePlan
 	}
 	if r.Journal.Stage == "snapshot_selected" {
 		r.configureEngine(requiredBytes)

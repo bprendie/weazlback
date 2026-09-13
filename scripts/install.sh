@@ -37,7 +37,11 @@ install_binary() {
   local name="$1"
   local temporary
   temporary="$(mktemp "$BIN_DIR/.${name}.XXXXXX")"
-  install -m0755 "$REPO_ROOT/$name" "$temporary"
+  local source="$REPO_ROOT/$name"
+  if [[ -f "$REPO_ROOT/BUNDLE.json" ]]; then
+    case "$(uname -m)" in x86_64|amd64) source="$REPO_ROOT/linux-amd64/$name";; aarch64|arm64) source="$REPO_ROOT/linux-arm64/$name";; *) echo "Unsupported architecture" >&2; exit 1;; esac
+  fi
+  install -m0755 "$source" "$temporary"
   mv -f "$temporary" "$BIN_DIR/$name"
 }
 
@@ -78,6 +82,11 @@ install_widget() {
 }
 
 install_widget
+
+if [[ -f "$REPO_ROOT/BUNDLE.json" ]]; then
+  mkdir -p "$INSTALL_ROOT/recovery-bundle"
+  cp -a "$REPO_ROOT/BUNDLE.json" "$REPO_ROOT/linux-amd64" "$REPO_ROOT/linux-arm64" "$INSTALL_ROOT/recovery-bundle/"
+fi
 
 install_schedule() {
 	[[ "${WEAZLBACK_SKIP_SCHEDULE:-0}" == "1" ]] && return

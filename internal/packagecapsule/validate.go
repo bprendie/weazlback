@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bprendie/weazlback/internal/architecture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +96,10 @@ func Validate(root string, manifest Manifest) error {
 }
 
 func VerifyArtifacts(root string, manifest Manifest, run Runner) (map[string]string, error) {
+	return VerifyArtifactsFor(root, manifest, run, architecture.Native())
+}
+
+func VerifyArtifactsFor(root string, manifest Manifest, run Runner, target string) (map[string]string, error) {
 	if run == nil {
 		run = ExecRunner{Quiet: true}
 	}
@@ -114,7 +119,7 @@ func VerifyArtifacts(root string, manifest Manifest, run Runner) (map[string]str
 		if meta.Name != pkg.Name || meta.Version != pkg.ArtifactVersion || meta.Architecture != pkg.Architecture {
 			return nil, fmt.Errorf("restored artifact identity mismatch for %s", pkg.Name)
 		}
-		if ok, reason := compatible(meta, buildInfo); !ok {
+		if ok, reason := compatibleFor(meta, buildInfo, target); !ok {
 			return nil, fmt.Errorf("restored artifact incompatible for %s: %s", pkg.Name, reason)
 		}
 		if pkg.Signature != "" {

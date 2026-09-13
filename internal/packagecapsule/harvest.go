@@ -14,6 +14,9 @@ type candidate struct {
 
 func harvest(options Options, root string, manifest *Manifest) {
 	roots := cacheRoots(root)
+	if options.ArtifactRoots != nil {
+		roots = options.ArtifactRoots
+	}
 	destination := filepath.Join(root, "artifacts")
 	totals, completed := map[string]int{}, map[string]int{}
 	for _, pkg := range manifest.Packages {
@@ -32,7 +35,11 @@ func harvest(options Options, root string, manifest *Manifest) {
 			manifest.Exceptions = append(manifest.Exceptions, Exception{Package: pkg.Name, Code: "artifact-missing", Detail: acquisitionHint(*pkg)})
 			continue
 		}
-		ok, reason := compatible(selected.meta, selected.buildInfo)
+		targetArch := options.TargetArchitecture
+		if targetArch == "" {
+			targetArch = manifest.Architecture
+		}
+		ok, reason := compatibleFor(selected.meta, selected.buildInfo, targetArch)
 		if !ok {
 			manifest.Summary.Rejected++
 			manifest.Exceptions = append(manifest.Exceptions, Exception{Package: pkg.Name, Code: "artifact-incompatible", Detail: reason})

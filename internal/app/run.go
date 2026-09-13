@@ -251,6 +251,7 @@ weazlback rotate repository-key                 rotate repository encryption key
   weazlback applications [--output P] capture application restore manifest
   weazlback packages refresh [options] capture encrypted package artifacts
   weazlback packages schedule --days N configure independent refresh reminders
+  weazlback packages architectures    manage independent ARM package capsules
   weazlback system snapshot [create|retry|list|verify|scrub] manage complete recovery generations
   weazlback browser repair [--apply] inspect or clear validated stale browser locks
   weazlback benchmark --engine E [--fixture F] [--work-dir D] [--output P]

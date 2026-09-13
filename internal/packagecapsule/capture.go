@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bprendie/weazlback/internal/architecture"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -85,10 +85,7 @@ func inventoryManifest(options Options) (Manifest, error) {
 	}
 	hostname, _ := os.Hostname()
 	identity := platform.Current()
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x86_64"
-	}
+	arch := architecture.Native()
 	explicit, foreign := stringSet(nonemptyLines(explicitOutput)), stringSet(nonemptyLines(foreignOutput))
 	packages := make([]Package, 0, len(installed))
 	officialCount, foreignCount := 0, 0

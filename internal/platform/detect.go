@@ -3,6 +3,7 @@ package platform
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 )
@@ -10,7 +11,7 @@ import (
 func Current() Identity {
 	facts := Facts{OSRelease: readOSRelease("/etc/os-release"), Architecture: runtime.GOARCH,
 		Desktop: firstEnvironment("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP"), Session: os.Getenv("XDG_SESSION_TYPE")}
-	_, err := os.Stat("/usr/bin/omarchy")
+	_, err := exec.LookPath("omarchy")
 	facts.Omarchy = err == nil
 	_, err = os.Stat("/sys/fs/selinux")
 	facts.SELinux = err == nil
@@ -28,7 +29,7 @@ func Detect(f Facts) Identity {
 	switch {
 	case f.Omarchy || id == "omarchy":
 		result.ID, result.Family, result.Variant, result.PackageFamily, result.Desktop = "omarchy", "arch", "omarchy", "pacman", "omarchy-shell"
-	case id == "arch" || contains(like, "arch"):
+	case id == "arch" || id == "archarm" || id == "archlinuxarm" || contains(like, "arch"):
 		result.Family, result.PackageFamily = "arch", "pacman"
 	case id == "ubuntu" || id == "debian" || contains(like, "debian") || contains(like, "ubuntu"):
 		result.Family, result.PackageFamily = "debian", "apt"

@@ -131,6 +131,13 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.packageProgress = msg.progress
 		m.status = packageProgressStatus(msg.progress)
 		return m, waitPackageEvent(msg.events)
+	case architecturePackagesDoneMsg:
+		if msg.err != nil {
+			m.err = msg.err.Error()
+		} else {
+			m.status = "architecture package management closed"
+		}
+		return m, nil
 	case packageDoneMsg:
 		m.busy, m.cancel, m.packageStage = false, nil, ""
 		if msg.err != nil {

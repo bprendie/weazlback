@@ -106,6 +106,10 @@ type Session struct {
 }
 
 type Plan struct {
+	NativePlan            *NativePackagePlan             `json:"native_plan,omitempty"`
+	Migration             Migration                      `json:"migration"`
+	PackagePreparedAt     time.Time                      `json:"package_prepared_at,omitempty"`
+	PackageReview         []string                       `json:"package_review,omitempty"`
 	SourceMachineID       string                         `json:"source_machine_id"`
 	TargetMachineID       string                         `json:"target_machine_id"`
 	AdoptSourceIdentity   bool                           `json:"adopt_source_identity"`
@@ -146,6 +150,10 @@ type Plan struct {
 }
 
 type Journal struct {
+	MigrationWithheld     []string             `json:"migration_withheld,omitempty"`
+	WithheldPaths         []string             `json:"withheld_paths,omitempty"`
+	Migration             Migration            `json:"migration"`
+	NativePlan            *NativePackagePlan   `json:"native_plan,omitempty"`
 	SchemaVersion         int                  `json:"schema_version"`
 	RepositoryID          string               `json:"repository_id"`
 	SnapshotID            string               `json:"snapshot_id"`

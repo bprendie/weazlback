@@ -25,6 +25,18 @@ Run the script to stage the binaries, the Omarchy widget, and the user services.
 ./scripts/install.sh
 ```
 
+## ARM64 / Snapdragon recovery
+
+Universal recovery media includes x64 and ARM64 tools. Run
+`./weazlback-turbo-restore` on the clean target to select native tools and packages
+automatically. Missing applications may download from the target repositories.
+Profiles → **X: Other architectures** prepares optional ARM package capsules
+independently; normal System Snapshots never build foreign packages.
+
+See [ARM64 recovery and package preparation](docs/ARM64_RECOVERY.md) for universal
+builds, kit preparation, target environment export, and migration boundaries.
+Snapdragon hardware qualification remains pending.
+
 ## TUI-First Mechanics
 
 GUIs are a crutch for tourists. Weazlback is terminal-native and keyboard-driven down to the bare metal.

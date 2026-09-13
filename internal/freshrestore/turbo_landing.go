@@ -53,6 +53,11 @@ func (turboLandingEngine) Stage(ctx context.Context, restore *Restore) error {
 		_ = deleteBtrfsSubvolume(stage)
 		return err
 	}
+	if err := restore.migrateStage(stage); err != nil {
+		restore.StageDir = standardStage
+		_ = deleteBtrfsSubvolume(stage)
+		return err
+	}
 	if err := restore.validateStage(); err != nil {
 		restore.StageDir = standardStage
 		_ = deleteBtrfsSubvolume(stage)

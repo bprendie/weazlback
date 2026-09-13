@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bprendie/weazlback/internal/config"
 	"github.com/bprendie/weazlback/internal/platform"
 )
 
 const ApplicationSchemaVersion = 2
 
 type ApplicationManifest struct {
+	MachineID      string             `json:"machine_id,omitempty"`
 	SchemaVersion  int                `json:"schema_version"`
 	CapturedAt     time.Time          `json:"captured_at"`
 	Hostname       string             `json:"hostname"`
@@ -70,6 +72,13 @@ func CaptureApplications(ctx context.Context) (ApplicationManifest, error) {
 		Services:    services(ctx), FlatpakRemotes: lines(run(ctx, "flatpak", "remotes", "--columns=name,url")),
 		OmarchyPlugins: directoryNames(filepath.Join(home, ".config", "omarchy", "plugins")),
 		ShellPlugins:   discoverShellPlugins(home), PkgInstall: relativeFiles(filepath.Join(home, "pkginstall"))}
+	if path, err := config.Path(); err == nil {
+		if _, err := os.Stat(path); err == nil {
+			if cfg, err := config.Load(path); err == nil {
+				m.MachineID = cfg.Machine.ID
+			}
+		}
+	}
 	m.WeazlApps = discoverWeazlApps(home)
 	m.PkgInstallPlan = parsePkgInstall(filepath.Join(home, "pkginstall"), m.PkgInstall)
 	for _, file := range m.PkgInstall {

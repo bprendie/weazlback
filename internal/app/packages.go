@@ -17,6 +17,9 @@ import (
 )
 
 func packagesCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "architectures" {
+		return architecturePackages(ctx, args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "schedule" {
 		return packageScheduleCommand(args[1:], stdout, stderr)
 	}

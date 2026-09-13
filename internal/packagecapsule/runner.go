@@ -23,6 +23,7 @@ func (r ExecRunner) context() context.Context {
 
 func (r ExecRunner) Output(name string, args ...string) (string, error) {
 	command := exec.CommandContext(r.context(), name, args...)
+	command.Env = append(os.Environ(), "LC_ALL=C")
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	if err := command.Run(); err != nil {
@@ -33,11 +34,13 @@ func (r ExecRunner) Output(name string, args ...string) (string, error) {
 
 func (r ExecRunner) Run(name string, args ...string) error {
 	command := exec.CommandContext(r.context(), name, args...)
+	command.Env = append(os.Environ(), "LC_ALL=C")
 	return r.run(command, name)
 }
 
 func (r ExecRunner) RunDir(dir, name string, args ...string) error {
 	command := exec.CommandContext(r.context(), name, args...)
+	command.Env = append(os.Environ(), "LC_ALL=C")
 	command.Dir = dir
 	return r.run(command, name)
 }

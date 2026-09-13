@@ -3,7 +3,7 @@ package packagecapsule
 import (
 	"bufio"
 	"fmt"
-	"runtime"
+	"github.com/bprendie/weazlback/internal/architecture"
 	"strings"
 )
 
@@ -58,11 +58,11 @@ func parsePackageInfo(value string) artifactMetadata {
 }
 
 func compatible(meta artifactMetadata, buildinfo string) (bool, string) {
-	wanted := runtime.GOARCH
-	if wanted == "amd64" {
-		wanted = "x86_64"
-	}
-	if meta.Architecture != "any" && meta.Architecture != wanted {
+	return compatibleFor(meta, buildinfo, architecture.Native())
+}
+
+func compatibleFor(meta artifactMetadata, buildinfo, wanted string) (bool, string) {
+	if !architecture.Compatible(meta.Architecture, wanted) {
 		return false, "artifact architecture " + meta.Architecture + " does not match " + wanted
 	}
 	if strings.Contains(strings.ToLower(buildinfo), "-march=native") {

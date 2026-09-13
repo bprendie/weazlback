@@ -41,6 +41,16 @@ func recoveryRefresh(args []string, stdout, stderr io.Writer) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	if _, err := os.Stat(filepath.Join(*binaryDir, recovery.BundleManifestName)); err == nil {
+		active, err := recovery.ActiveMedia(*target)
+		if err != nil {
+			return err
+		}
+		return recovery.PrepareUniversal(*target, *binaryDir, filepath.Join(active, "weazlback-recovery.wzrk"), Version)
+	}
+	if _, err := os.Stat(filepath.Join(*target, "CURRENT")); err == nil {
+		return fmt.Errorf("universal media refresh requires --binary-dir pointing to a complete BUNDLE.json directory")
+	}
 	executable := filepath.Join(*binaryDir, "weazlback")
 	if err := validateBinaryPair(executable, filepath.Join(*binaryDir, "weazlback-restore")); err != nil {
 		return err
@@ -66,8 +76,17 @@ func recoveryPrepare(args []string, stdout, stderr io.Writer) error {
 		return errors.New("--target must be an existing directory; Weazlback never formats or mounts devices")
 	}
 	executable, restoreBinary := filepath.Join(*binaryDir, "weazlback"), filepath.Join(*binaryDir, "weazlback-restore")
-	if err := validateBinaryPair(executable, restoreBinary); err != nil {
-		return err
+	_, bundleErr := os.Stat(filepath.Join(*binaryDir, recovery.BundleManifestName))
+	universal := bundleErr == nil
+	if universal {
+		if _, err := recovery.ValidateBundle(*binaryDir, Version); err != nil {
+			return err
+		}
+	}
+	if !universal {
+		if err := validateBinaryPair(executable, restoreBinary); err != nil {
+			return err
+		}
 	}
 	temporaryKit, err := os.CreateTemp(*target, ".weazlback-recovery-*.wzrk")
 	if err != nil {
@@ -80,6 +99,9 @@ func recoveryPrepare(args []string, stdout, stderr io.Writer) error {
 	if err := recoveryExport([]string{"--output", temporaryPath}, io.Discard, stderr); err != nil {
 		return err
 	}
+	if universal {
+		return recovery.PrepareUniversal(*target, *binaryDir, temporaryPath, Version)
+	}
 	if err := recovery.PrepareMedia(*target, recovery.MediaSources{
 		Weazlback: executable, Restore: restoreBinary, Kit: temporaryPath, Restic: toolPath("restic"), Version: Version, Source: *binaryDir,
 	}); err != nil {
@@ -91,6 +113,11 @@ func recoveryPrepare(args []string, stdout, stderr io.Writer) error {
 
 func defaultBinaryDir() string {
 	home, _ := os.UserHomeDir()
+	for _, path := range []string{filepath.Join(home, ".weazlback", "recovery-bundle"), filepath.Join(home, ".weazlback", "bin")} {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
 	return filepath.Join(home, ".local", "bin")
 }
 

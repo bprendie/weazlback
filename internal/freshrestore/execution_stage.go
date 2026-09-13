@@ -17,6 +17,9 @@ func (r *Restore) stageCoreStandard(ctx context.Context) error {
 	if err := r.restoreSelection(ctx, r.StageDir, false); err != nil {
 		return err
 	}
+	if err := r.migrateStage(r.StageDir); err != nil {
+		return err
+	}
 	return r.validateStage()
 }
 
@@ -136,7 +139,7 @@ func (r *Restore) validateStage() error {
 		if err != nil {
 			return err
 		}
-		if _, err := os.Lstat(stagedPath(r.StageDir, filepath.Join(r.Plan.OriginalHome, rel))); err != nil {
+		if _, err := os.Lstat(stagedPath(r.StageDir, filepath.Join(r.Plan.OriginalHome, rel))); err != nil && !r.Plan.Migration.Active {
 			return fmt.Errorf("staged Home path %s is missing: %w", target, err)
 		}
 	}
@@ -148,10 +151,13 @@ func (r *Restore) validateStage() error {
 			continue
 		}
 		for _, path := range profile.Includes {
-			if _, err := os.Lstat(stagedPath(r.StageDir, path)); err != nil {
+			if _, err := os.Lstat(stagedPath(r.StageDir, path)); err != nil && !r.Plan.Migration.Active {
 				return fmt.Errorf("staged Core path %s is missing: %w", path, err)
 			}
 		}
+	}
+	if r.Plan.Migration.Active {
+		return nil
 	}
 	for _, app := range r.Plan.LocalApps {
 		binDir := stagedPath(r.StageDir, filepath.Join(r.Plan.OriginalHome, "."+app, "bin"))

@@ -122,7 +122,11 @@ func New() Model {
 	if len(kits) > 1 {
 		stage = "kit-choice"
 	}
-	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "core-home", engine: freshrestore.EngineStandard, mediaVersion: recoveryMediaVersion()}
+	engine := freshrestore.EngineStandard
+	if os.Getenv("WEAZLBACK_RESTORE_ENGINE") == freshrestore.EngineTurbo {
+		engine = freshrestore.EngineTurbo
+	}
+	return Model{stage: stage, input: input, kits: kits, hostname: "original", scope: "core-home", engine: engine, mediaVersion: recoveryMediaVersion()}
 }
 
 func (m Model) Init() tea.Cmd { return textinput.Blink }

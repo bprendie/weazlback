@@ -119,3 +119,18 @@ func (m Model) togglePackageSchedule() (tea.Model, tea.Cmd) {
 	m.err, m.status = "", "Package Capsule schedule "+state
 	return m, nil
 }
+
+func (m Model) architecturePackageUI() (tea.Model, tea.Cmd) {
+	if m.busy {
+		return m, nil
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		m.err = err.Error()
+		return m, nil
+	}
+	command := exec.Command(binary, "packages", "architectures")
+	return m, tea.ExecProcess(command, func(err error) tea.Msg { return architecturePackagesDoneMsg{err} })
+}
+
+type architecturePackagesDoneMsg struct{ err error }

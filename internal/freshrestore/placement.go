@@ -38,6 +38,13 @@ func (r *Restore) commitCore() ([]string, error) {
 }
 
 func (r *Restore) placeJournaled(source, target string) error {
+	if r.Plan.Migration.Active {
+		if _, err := os.Lstat(source); os.IsNotExist(err) && r.Journal.PendingTarget != target {
+			r.Journal.WithheldPaths = appendUniqueStrings(r.Journal.WithheldPaths, target)
+			return SaveJournal(r.JournalPath, r.Journal)
+		}
+	}
+
 	backup := target + ".weazlback-before-" + time.Now().Format("20060102-150405")
 	if r.Journal.PendingTarget == target {
 		source, backup = r.Journal.PendingSource, r.Journal.PendingBackup

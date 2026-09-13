@@ -16,6 +16,8 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 		CapsuleFallback: append([]string(nil), r.Journal.CapsuleFallback...), CapsuleFallbackReason: r.Journal.CapsuleFallbackReason,
 		HeavyDeferred: r.Plan.Scope != "everything", JournalPath: r.JournalPath,
 		Engine: r.Journal.Engine, FallbackReason: r.Journal.FallbackReason, Qualification: r.Journal.Qualification, Timing: r.Journal.Timing}
+	report.ManualReview = append(report.ManualReview, r.Plan.Migration.Review...)
+	report.ManualReview = append(report.ManualReview, r.Plan.PackageReview...)
 	if r.Journal.Timing.StartedAt.IsZero() {
 		r.Journal.Timing.StartedAt = time.Now().UTC()
 	}
@@ -35,6 +37,16 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 		}
 		stopSudo := keepSudoAlive(ctx)
 		defer stopSudo()
+	}
+	if r.Plan.Migration.Active && len(r.Journal.PackageErrors) > 0 && stageAtLeast(r.Journal.Stage, "packages_reconciled") {
+		installed, fallback, errors := r.reconcilePackageCapsule(ctx)
+		report.CapsuleInstalled = appendUniqueStrings(report.CapsuleInstalled, installed...)
+		report.CapsuleFallback = fallback
+		report.PackageErrors = append(errors, reconcileApplicationLanes(ctx, r.Plan, r.Options.Progress, true, true, 0)...)
+		r.Journal.PackageErrors = append([]string{}, report.PackageErrors...)
+		if err := SaveJournal(r.JournalPath, r.Journal); err != nil {
+			return report, err
+		}
 	}
 	if !stageAtLeast(r.Journal.Stage, "plan_confirmed") {
 		if err := r.advance("plan_confirmed"); err != nil {
@@ -127,6 +139,9 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 	report.BrowserRepair = r.Journal.BrowserRepair
 	report.BrowserIssues = append([]string(nil), r.Journal.BrowserIssues...)
 	if r.Plan.Scope != "applications" && !stageAtLeast(r.Journal.Stage, "user_state_reconciled") {
+		if err := r.installNativeRuntime(ctx); err != nil {
+			return report, fmt.Errorf("install native recovery runtime: %w", err)
+		}
 		offset := len(r.Plan.Official) + len(r.Plan.AUR) + len(r.Plan.SystemServices)
 		report.PackageErrors = append(report.PackageErrors, reconcileApplicationLanes(ctx, r.Plan, r.Options.Progress, false, true, offset)...)
 		r.Journal.PackageErrors = append([]string(nil), report.PackageErrors...)
@@ -157,7 +172,9 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 			return report, fmt.Errorf("persist target machine identity: %w", err)
 		}
 	}
-	report.Complete = len(report.PackageErrors) == 0 && len(report.BrowserIssues) == 0
+	r.Journal.MigrationWithheld = appendUniqueStrings(r.Journal.MigrationWithheld, r.MigrationWithheld...)
+	report.ManualReview = append(report.ManualReview, r.Journal.MigrationWithheld...)
+	report.Complete = len(report.PackageErrors) == 0 && len(report.BrowserIssues) == 0 && len(r.Plan.PackageReview) == 0 && len(r.Journal.MigrationWithheld) == 0
 	if err := syncPathFilesystems(r.Journal.CommittedPaths); err != nil {
 		return report, fmt.Errorf("durability sync: %w", err)
 	}

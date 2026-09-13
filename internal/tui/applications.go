@@ -48,7 +48,7 @@ func (m Model) applicationsScreen() string {
 			capsule.CapturedAt.Local().Format("2006-01-02 15:04:05"), capsule.Summary.Installed, capsule.Summary.Captured,
 			capsule.Summary.Official, capsule.Summary.Foreign, bytesText(uint64(capsule.Summary.Bytes)), len(capsule.Exceptions))
 	}
-	body += fmt.Sprintf("Refresh schedule    %s\n\n[P] refresh cached + official artifacts\n[A] review and build missing AUR artifacts\n[S] toggle independent schedule\n[enter] inspect application manifest", schedule)
+	body += fmt.Sprintf("Refresh schedule    %s\n\nThis system (native packages)\n[P] refresh cached + official artifacts\n[A] review and build missing AUR artifacts\n[S] toggle independent schedule\n[X] Other architectures → ARM64 packages\n[enter] inspect application manifest", schedule)
 	if m.applications == nil {
 		return body
 	}

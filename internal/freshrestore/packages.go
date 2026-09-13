@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/bprendie/weazlback/internal/inventory"
+	"github.com/bprendie/weazlback/internal/packagecapsule"
+	"github.com/bprendie/weazlback/internal/targetpackages"
 )
 
 func MissingApplications(ctx context.Context, manifest inventory.ApplicationManifest) (official, aur, flatpaks []string) {
@@ -103,6 +105,11 @@ func reconcileApplicationLanes(ctx context.Context, plan Plan, progress func(Res
 	}
 	if system && len(plan.Official) > 0 {
 		run("official packages", plan.Official, func(items []string) error {
+			if plan.Migration.Active {
+				if err := targetpackages.CheckTransaction(packagecapsule.ExecRunner{Context: ctx, Quiet: true}, items); err != nil {
+					return err
+				}
+			}
 			args := append([]string{"-n", "pacman", "-S", "--needed", "--noconfirm", "--"}, items...)
 			if progress != nil {
 				return runPacmanProgress(ctx, "sudo", args, "applications", "official packages", items, progress)
@@ -146,7 +153,11 @@ func reconcileApplicationLanes(ctx context.Context, plan Plan, progress func(Res
 	}
 	if user && len(plan.Flatpak) > 0 {
 		run("Flatpaks", plan.Flatpak, func(items []string) error {
-			return invoke("flatpak", append([]string{"install", "--user", "--noninteractive"}, items...)...)
+			args := []string{"install", "--user", "--noninteractive"}
+			if plan.Migration.Active {
+				args = append(args, "flathub")
+			}
+			return invoke("flatpak", append(args, items...)...)
 		})
 	}
 	if system && len(plan.SystemServices) > 0 {

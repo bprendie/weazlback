@@ -273,6 +273,7 @@ func (s Service) PruneMachineProfile(ctx context.Context, repo Repository, machi
 		tags += ",machine:" + machineID
 	}
 	args := []string{"forget", "--prune", "--tag", tags,
+		"--keep-tag", "profile:packages-arm64", "--keep-tag", "profile:packages-amd64",
 		"--keep-hourly", fmt.Sprint(hourly), "--keep-daily", fmt.Sprint(daily),
 		"--keep-weekly", fmt.Sprint(weekly), "--keep-monthly", fmt.Sprint(monthly)}
 	_, err := s.Runner.Run(ctx, repo, args...)

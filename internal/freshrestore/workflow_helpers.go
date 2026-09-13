@@ -81,6 +81,9 @@ func (r *Restore) StagePreview(ctx context.Context) (string, error) {
 	if err := r.restoreSelection(ctx, target, true); err != nil {
 		return "", err
 	}
+	if err := r.migrateStage(target); err != nil {
+		return "", err
+	}
 	originalStage := r.StageDir
 	r.StageDir = target
 	err := r.validateStage()

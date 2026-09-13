@@ -2,6 +2,7 @@ package recoverytui
 
 import (
 	"encoding/json"
+	"github.com/bprendie/weazlback/internal/recovery"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,7 +13,11 @@ func recoveryMediaVersion() string {
 	if err != nil {
 		return "unrecorded build"
 	}
-	body, err := os.ReadFile(filepath.Join(filepath.Dir(executable), "WEAZLBACK-VERSION.json"))
+	_ = executable
+	body, err := os.ReadFile(filepath.Join(recovery.MediaRoot(), "BUNDLE.json"))
+	if err != nil {
+		body, err = os.ReadFile(filepath.Join(recovery.MediaRoot(), "WEAZLBACK-VERSION.json"))
+	}
 	if err != nil {
 		return "unrecorded build"
 	}
@@ -44,6 +49,7 @@ func discoverKits() []string {
 			}
 		}
 	}
+	add(filepath.Join(recovery.MediaRoot(), "*.wzrk"))
 	cwd, _ := os.Getwd()
 	executable, _ := os.Executable()
 	add(filepath.Join(filepath.Dir(executable), "*.wzrk"))

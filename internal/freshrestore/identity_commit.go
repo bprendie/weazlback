@@ -50,6 +50,9 @@ func (r *Restore) repairInconsistentJournal() error {
 
 func (r *Restore) journalCoversCore() bool {
 	for _, target := range r.expectedTargets() {
+		if contains(r.Journal.WithheldPaths, target) {
+			continue
+		}
 		if !contains(r.Journal.CommittedPaths, target) {
 			return false
 		}
@@ -59,6 +62,9 @@ func (r *Restore) journalCoversCore() bool {
 
 func (r *Restore) validateCommit() error {
 	for _, target := range r.expectedTargets() {
+		if contains(r.Journal.WithheldPaths, target) {
+			continue
+		}
 		if !contains(r.Journal.CommittedPaths, target) {
 			return fmt.Errorf("Core placement invariant failed: %s was not committed", target)
 		}

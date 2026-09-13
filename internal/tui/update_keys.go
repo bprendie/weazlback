@@ -51,6 +51,8 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		switch msg.String() {
+		case "X":
+			return m.architecturePackageUI()
 		case "P":
 			return m.requestPackageCapture(false)
 		case "A":
