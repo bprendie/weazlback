@@ -39,6 +39,9 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.mode == modeProfiles && !m.railFocused {
+		if m.armStage != "" && (msg.String() == "enter" || msg.String() == "esc" || msg.String() == "T" || msg.String() == "X" || msg.String() == "P" || msg.String() == "A" || msg.String() == "S") {
+			return m.updateARMKey(msg)
+		}
 		if m.packageStage == "confirm-aur" {
 			switch msg.String() {
 			case "enter":
@@ -191,6 +194,10 @@ func (m Model) updateModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	}
 	if m.vaultStage != "" {
 		model, cmd := m.updateVault(msg)
+		return true, model, cmd
+	}
+	if m.mode == modeProfiles && m.armStage == "setup" {
+		model, cmd := m.updateARMKey(msg)
 		return true, model, cmd
 	}
 	if m.destinationStage != "" {

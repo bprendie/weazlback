@@ -14,15 +14,16 @@ import (
 const SchemaVersion = 1
 
 type Config struct {
-	SchemaVersion     int           `json:"schema_version"`
-	ActiveVault       string        `json:"active_vault"`
-	Machine           Machine       `json:"machine"`
-	ActiveDestination string        `json:"active_destination,omitempty"`
-	Destinations      []Destination `json:"destinations"`
-	Profiles          []Profile     `json:"profiles"`
-	Retention         Retention     `json:"retention"`
-	HeavyRetention    Retention     `json:"heavy_retention"`
-	PackagePolicy     PackagePolicy `json:"package_policy"`
+	SchemaVersion        int           `json:"schema_version"`
+	ActiveVault          string        `json:"active_vault"`
+	Machine              Machine       `json:"machine"`
+	ActiveDestination    string        `json:"active_destination,omitempty"`
+	Destinations         []Destination `json:"destinations"`
+	Profiles             []Profile     `json:"profiles"`
+	Retention            Retention     `json:"retention"`
+	HeavyRetention       Retention     `json:"heavy_retention"`
+	PackagePolicy        PackagePolicy `json:"package_policy"`
+	ARMTargetEnvironment string        `json:"arm_target_environment,omitempty"`
 }
 
 type Machine struct {

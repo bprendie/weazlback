@@ -131,13 +131,17 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.packageProgress = msg.progress
 		m.status = packageProgressStatus(msg.progress)
 		return m, waitPackageEvent(msg.events)
-	case architecturePackagesDoneMsg:
+	case armSudoDoneMsg:
 		if msg.err != nil {
-			m.err = msg.err.Error()
-		} else {
-			m.status = "architecture package management closed"
+			return m.finishARMCapture(armDoneMsg{err: msg.err})
 		}
-		return m, nil
+		return m.beginARMCapture()
+	case armProgressMsg:
+		m.armLanes[msg.lane] = msg.progress
+		m.status = "ARM64 " + msg.progress.State + " " + msg.progress.Current
+		return m, waitARMEvent(msg.events)
+	case armDoneMsg:
+		return m.finishARMCapture(msg)
 	case packageDoneMsg:
 		m.busy, m.cancel, m.packageStage = false, nil, ""
 		if msg.err != nil {

@@ -50,6 +50,10 @@ func Digest(m inventory.ApplicationManifest) string {
 	return hex.EncodeToString(h[:])
 }
 func Resolve(m inventory.ApplicationManifest, arch, fingerprint string, run packagecapsule.Runner) Plan {
+	return resolveWithProgress(m, arch, fingerprint, run, nil)
+}
+
+func resolveWithProgress(m inventory.ApplicationManifest, arch, fingerprint string, run packagecapsule.Runner, progress func(packagecapsule.Progress)) Plan {
 	p := Plan{Versions: map[string]string{}, Architecture: architecture.Package(arch), Fingerprint: fingerprint, InventoryDigest: Digest(m)}
 	installed, _ := run.Output("pacman", "-Qq")
 	have := map[string]bool{}
@@ -57,7 +61,11 @@ func Resolve(m inventory.ApplicationManifest, arch, fingerprint string, run pack
 		have[name] = true
 	}
 	seen := map[string]bool{}
-	for _, name := range append(append([]string{}, m.PackagePlan.Official...), m.PackagePlan.AUR...) {
+	names := append(append([]string{}, m.PackagePlan.Official...), m.PackagePlan.AUR...)
+	for index, name := range names {
+		if progress != nil {
+			progress(packagecapsule.Progress{Phase: "resolving", Package: name, Source: "official", Completed: index, Total: len(names)})
+		}
 		if seen[name] {
 			continue
 		}

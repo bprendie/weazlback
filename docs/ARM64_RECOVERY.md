@@ -43,9 +43,18 @@ Btrfs fast landing remains a Turbo prerequisite; qualification/fallback is repor
 
 ## Independent ARM package preparation
 
-Profiles → **X: Other architectures → ARM64** opens the architecture package
-manager. It offers target export, source inventory export, availability inspection,
-preparation, explicit native source builds, verification, and import.
+**Apps → Shift+X** prepares ARM64 application packages inside the TUI. On first
+use, supply the settings folder exported from the Snapdragon PC. Weazlback keeps a
+private copy and remembers it. Subsequent runs capture the current source inventory,
+download and verify ARM packages, and save an independent `packages-arm64` snapshot
+in the default repository. No output path or source inventory export is needed.
+
+PACKAGES, AUR, and REPO use the same progress rails as System Set. Unavailable
+applications appear as review notes; source builds remain explicit. Enter refreshes
+the ARM capsule, T changes the remembered target settings, and Esc returns to Apps.
+Ctrl+C cancels a running operation. Native package schedules and System Sets remain
+independent. The CLI workflow below remains available for exported snapshot inventories,
+availability inspection, explicit native source builds, verification, and import.
 
 Normal System Snapshots only capture native packages. They never invoke foreign
 package preparation. ARM capsules are optional accelerators, with a separate date

@@ -20,17 +20,26 @@ func Prepare(ctx context.Context, root, staging, machine string, source inventor
 	if err != nil {
 		return empty(err)
 	}
-	base := packagecapsule.ExecRunner{Context: ctx}
+	base := packagecapsule.ExecRunner{Context: ctx, Quiet: progress != nil && !build}
 	run := IsolatedRunner{Base: base, Root: root, Environment: env}
 	if download {
+		if progress != nil {
+			progress(packagecapsule.Progress{Phase: "syncing", Package: "target repositories", Source: "official"})
+		}
 		if err := run.Initialize(); err != nil {
 			return empty(err)
 		}
 	}
-	plan := Resolve(source, env.Architecture, env.Fingerprint, run)
+	plan := resolveWithProgress(source, env.Architecture, env.Fingerprint, run, progress)
 	manifest := packagecapsule.Manifest{MachineID: machine, Architecture: env.Architecture, Platform: env.Platform, PackageFamily: "pacman", TargetFingerprint: env.Fingerprint, SourceInventoryDigest: plan.InventoryDigest, Flatpaks: source.PackagePlan.Flatpak}
 	manifest.ManualReview = append(manifest.ManualReview, plan.Review...)
-	for _, name := range plan.Official {
+	for index, name := range plan.Official {
+		if err := ctx.Err(); err != nil {
+			return empty(err)
+		}
+		if progress != nil {
+			progress(packagecapsule.Progress{Phase: "download", Package: name, Source: "official", Completed: index, Total: len(plan.Official)})
+		}
 		out, err := run.Output("pacman", "-Si", "--", name)
 		if err != nil {
 			return empty(err)

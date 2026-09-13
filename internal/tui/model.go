@@ -156,6 +156,11 @@ type Model struct {
 	packageManifest      *packagecapsule.Manifest
 	packageProgress      packagecapsule.Progress
 	packageStage         string
+	armStage             string
+	armInput             textinput.Model
+	armLanes             map[string]systemSnapshotLane
+	armStart             time.Time
+	armManifest          *packagecapsule.Manifest
 	packageBuildAUR      bool
 	helpVisible          bool
 	heavyReport          heavy.Report

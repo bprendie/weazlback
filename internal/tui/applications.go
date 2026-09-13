@@ -27,7 +27,10 @@ func (m Model) startApplications() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) applicationsScreen() string {
-	body := m.styles.header.Render("PROFILES / PACKAGE CAPSULE") + "\n\n"
+	if m.armStage != "" {
+		return m.armPackagesScreen()
+	}
+	body := m.styles.header.Render("APPS / PACKAGE CAPSULE") + "\n\n"
 	if m.packageStage == "confirm-aur" {
 		return body + "AUR BUILD EXECUTION\n\nThis runs reviewed AUR PKGBUILDs now so disaster recovery will not compile them later.\nPKGBUILDs execute code as your user and may request dependency installation.\n\nenter build + capture  •  esc cancel"
 	}
