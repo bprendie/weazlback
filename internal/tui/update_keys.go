@@ -17,6 +17,13 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.workspace == "restore" {
 		return m.updateRestoreWorkspaceKey(msg)
 	}
+	// The Apps shortcut takes precedence over the global lowercase x navigation.
+	if m.mode == modeProfiles && m.packageStage != "confirm-aur" && (msg.String() == "x" || msg.String() == "X") {
+		if !m.busy {
+			m.railFocused = false
+		}
+		return m.architecturePackageUI()
+	}
 	if m.railFocused && (msg.String() == "r" || msg.String() == "R") {
 		if m.busy {
 			m.status = "Restore Mode unavailable while backup work is active"

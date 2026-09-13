@@ -43,7 +43,7 @@ Btrfs fast landing remains a Turbo prerequisite; qualification/fallback is repor
 
 ## Independent ARM package preparation
 
-**Apps → Shift+X** prepares ARM64 application packages inside the TUI. On first
+**Apps → x (or Shift+X)** prepares ARM64 application packages inside the TUI. On first
 use, supply the settings folder exported from the Snapdragon PC. Weazlback keeps a
 private copy and remembers it. Subsequent runs capture the current source inventory,
 download and verify ARM packages, and save an independent `packages-arm64` snapshot

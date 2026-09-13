@@ -163,3 +163,22 @@ func TestARMResultPreservesNativeScheduleAndSystemSet(t *testing.T) {
 		}
 	}
 }
+
+func TestARMShortcutWorksWithEitherCaseAndFocus(t *testing.T) {
+	for _, key := range []rune{'x', 'X'} {
+		for _, rail := range []bool{false, true} {
+			m := Model{cfg: config.Default(), mode: modeProfiles, railFocused: rail, styles: newStyles()}
+			updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+			got := updated.(Model)
+			if got.mode != modeProfiles || got.armStage != "setup" || got.railFocused {
+				t.Fatalf("key=%c rail=%v: mode=%v stage=%s focus=%v", key, rail, got.mode, got.armStage, got.railFocused)
+			}
+		}
+	}
+	m := Model{cfg: config.Default(), mode: modeProfiles, busy: true, operation: "Full System Snapshot", styles: newStyles()}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	got := updated.(Model)
+	if cmd != nil || got.armStage != "" || got.mode != modeProfiles || !strings.Contains(got.status, "wait for it to finish") {
+		t.Fatal("busy shortcut should explain why it cannot start")
+	}
+}

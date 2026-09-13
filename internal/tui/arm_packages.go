@@ -34,6 +34,7 @@ type armDoneMsg struct {
 
 func (m Model) architecturePackageUI() (tea.Model, tea.Cmd) {
 	if m.busy {
+		m.status = "ARM64 packages unavailable while another operation is running; wait for it to finish"
 		return m, nil
 	}
 	m.err = ""
