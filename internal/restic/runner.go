@@ -172,6 +172,16 @@ func (r Runner) run(ctx context.Context, repo Repository, stdout io.Writer, newP
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("restic: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
+	// Restic can report unreadable snapshots on stderr yet return a successful
+	// exit status with an empty or partial JSON list. Never treat that as history.
+	if len(args) > 0 && args[0] == "snapshots" {
+		for _, diagnostic := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+			lower := strings.ToLower(diagnostic)
+			if strings.Contains(lower, "could not load snapshots") || strings.Contains(lower, "ignoring ") || strings.Contains(lower, "permission denied") {
+				return fmt.Errorf("restic snapshot history could not be read completely: %s", diagnostic)
+			}
+		}
+	}
 	return nil
 }
 

@@ -91,6 +91,12 @@ func (m Model) body() string {
 		return "◉ Unlocking kit and verifying repository…"
 	case "authorizing":
 		return "Authorizing the visible restore transaction…"
+	case "history-access":
+		actions := "[r] retry reading history\n[esc] return to destinations"
+		if !m.destinationIsSSH() {
+			actions = "[a] adopt exact local repository with sudo\n" + actions
+		}
+		return "REPOSITORY HISTORY ACCESS BLOCKED\n\n" + m.err + "\n\n" + actions
 	case "access":
 		return "REPOSITORY ACCESS BLOCKED\n\n" + m.err + "\n\n[a] adopt exact local repository with sudo\n[o] choose a different local mount path\n[r] retry"
 	case "plan":

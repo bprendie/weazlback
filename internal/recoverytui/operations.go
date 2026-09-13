@@ -159,6 +159,23 @@ func (m Model) authorizeAdoption() (tea.Model, tea.Cmd) {
 	return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return sudoMsg{err} })
 }
 
+type historySudoMsg struct{ err error }
+type historyAdoptedMsg struct{ err error }
+
+func (m Model) adoptHistoryRepository() tea.Cmd {
+	kit, destination := m.kit, m.destination
+	passphrase := append([]byte(nil), m.passphrase...)
+	return func() tea.Msg {
+		defer zeroBytes(passphrase)
+		session, err := freshrestore.OpenSessionDestinationAt(kit, passphrase, destination, "")
+		if err != nil {
+			return historyAdoptedMsg{err}
+		}
+		defer session.Close()
+		return historyAdoptedMsg{freshrestore.AdoptLocalRepository(context.Background(), session.Destination, session.Repository.Location)}
+	}
+}
+
 func (m Model) execute() tea.Cmd {
 	r := m.restore
 	events := make(chan tea.Msg, 32)

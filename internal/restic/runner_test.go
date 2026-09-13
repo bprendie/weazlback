@@ -116,3 +116,23 @@ func testElevatedPasswordUsesParentPipe(t *testing.T, graphical bool) {
 		t.Fatalf("output=%q", out)
 	}
 }
+
+func TestSnapshotLoadErrorsCannotLookLikeEmptyHistory(t *testing.T) {
+	for _, diagnostic := range []string{"Ignoring abc: open snapshot: permission denied", "could not load snapshots: permission denied"} {
+		t.Run(diagnostic, func(t *testing.T) {
+			dir := t.TempDir()
+			script := filepath.Join(dir, "restic")
+			body := "#!/bin/sh\nIFS= read -r pass < \"$RESTIC_PASSWORD_FILE\"\nprintf '[]'\nprintf '%s\\n' '" + diagnostic + "' >&2\nexit 0\n"
+			if err := os.WriteFile(script, []byte(body), 0700); err != nil {
+				t.Fatal(err)
+			}
+			runner := New(nil)
+			runner.Binary = script
+			var snapshots []Snapshot
+			err := runner.JSON(t.Context(), Repository{Location: dir, Password: []byte("fixture")}, &snapshots, "snapshots", "--json")
+			if err == nil || !strings.Contains(err.Error(), diagnostic) {
+				t.Fatalf("hidden snapshot error: %v", err)
+			}
+		})
+	}
+}

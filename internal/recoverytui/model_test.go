@@ -231,3 +231,31 @@ func TestSelectiveBrowserFuzzyFiltersWithoutCatalog(t *testing.T) {
 		t.Fatalf("visible=%#v", m.visibleFiles)
 	}
 }
+
+func TestUnreadableHistoryOffersAdoptionBeforeSourceSelection(t *testing.T) {
+	m := Model{stage: "destination-choice", destinationIndex: 1,
+		destinations: []config.Destination{{ID: "remote", Kind: "ssh"}, {ID: "usb", Kind: "local"}},
+		destinationSummaries: map[string]freshrestore.DestinationRecoverySummary{
+			"remote": {LatestCore: time.Now()}, "usb": {Error: "snapshot permission denied"},
+		},
+	}
+	next, _ := m.updateDestinationChoiceKey("enter")
+	m = next.(Model)
+	if m.stage != "history-access" || !strings.Contains(m.body(), "[a] adopt exact local repository") || !strings.Contains(m.body(), "permission denied") {
+		t.Fatalf("permission failure was not actionable: stage=%s view=%s", m.stage, m.body())
+	}
+	next, cmd := m.Update(historyAdoptedMsg{})
+	m = next.(Model)
+	if m.stage != "destination-loading" || cmd == nil {
+		t.Fatal("adoption did not reload history")
+	}
+}
+
+func TestUnknownHistoryDoesNotDisplayYearZeroAsOlderBackup(t *testing.T) {
+	m := Model{destinationIndex: 1, destinations: []config.Destination{{ID: "remote"}, {ID: "usb"}},
+		destinationSummaries: map[string]freshrestore.DestinationRecoverySummary{"remote": {LatestCore: time.Now()}}}
+	next, _ := m.updateDestinationChoiceKey("enter")
+	if next.(Model).stage == "destination-warning" {
+		t.Fatal("unknown history displayed as older backup")
+	}
+}

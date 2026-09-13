@@ -188,7 +188,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case identitiesMsg:
 		if msg.err != nil {
-			m.err, m.stage = msg.err.Error(), "destination-choice"
+			m.err, m.stage = msg.err.Error(), "history-access"
 			return m, nil
 		}
 		m.identities, m.identityIndex = msg.identities, 0
@@ -272,6 +272,19 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.stage = "loading"
 		return m, m.prepare(true)
+	case historySudoMsg:
+		if msg.err != nil {
+			m.err, m.stage = msg.err.Error(), "history-access"
+			return m, nil
+		}
+		return m, m.adoptHistoryRepository()
+	case historyAdoptedMsg:
+		if msg.err != nil {
+			m.err, m.stage = msg.err.Error(), "history-access"
+			return m, nil
+		}
+		m.stage, m.err = "destination-loading", ""
+		return m, m.loadDestinations()
 	case executeSudoMsg:
 		if msg.err != nil {
 			m.stage, m.err = "plan", msg.err.Error()

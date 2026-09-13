@@ -48,6 +48,16 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.updateDestinationChoiceKey(key)
 	case "destination-warning":
 		return m.updateDestinationWarningKey(key)
+	case "history-access":
+		if key == "esc" {
+			m.stage, m.err = "destination-choice", ""
+		} else if key == "r" {
+			m.stage = "destination-loading"
+			return m, m.loadDestinations()
+		} else if key == "a" && !m.destinationIsSSH() {
+			return m, tea.ExecProcess(exec.Command("sudo", "-v"), func(err error) tea.Msg { return historySudoMsg{err} })
+		}
+		return m, nil
 	case "identity-choice":
 		if key == "up" || key == "k" {
 			m.identityIndex = max(0, m.identityIndex-1)
