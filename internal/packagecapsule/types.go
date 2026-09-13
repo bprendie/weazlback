@@ -72,6 +72,8 @@ type Progress struct {
 	Completed      int
 	Total          int
 	Bytes          int64
+	BytesTotal     int64
+	Rate           float64
 }
 
 type Options struct {

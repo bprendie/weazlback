@@ -141,7 +141,7 @@ func (r IsolatedRunner) Initialize() error {
 			return err
 		}
 	}
-	if err := os.WriteFile(filepath.Join(r.Root, "pacman.conf"), []byte(r.Environment.Config), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(r.Root, "pacman.conf"), []byte(downloadConfig(r.Environment.Config)), 0600); err != nil {
 		return err
 	}
 	return r.Run("pacman", "-Sy", "--noconfirm")

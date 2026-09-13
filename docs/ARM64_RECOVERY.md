@@ -56,6 +56,11 @@ Snapdragon PC instead. Weazlback keeps a private copy and remembers it. Subseque
 download and verify ARM packages, and save an independent `packages-arm64` snapshot
 in the default repository. No output path or source inventory export is needed.
 
+ARM downloads use one pacman download-only transaction with three concurrent
+streams, sharing dependency downloads and retaining pacman signature checks. The
+PACKAGES rail reports aggregate cached/downloaded bytes, completed archive counts,
+and transfer rate before artifact verification and repository archiving.
+
 PACKAGES, AUR, and REPO use the same progress rails as System Set. Unavailable
 applications appear as review notes; source builds remain explicit. Enter refreshes
 the ARM capsule, T changes the remembered target settings, and Esc returns to Apps.

@@ -33,23 +33,15 @@ func Prepare(ctx context.Context, root, staging, machine string, source inventor
 	plan := resolveWithProgress(source, env.Architecture, env.Fingerprint, run, progress, heldPackages(env.Config))
 	manifest := packagecapsule.Manifest{MachineID: machine, Architecture: env.Architecture, Platform: env.Platform, PackageFamily: "pacman", TargetFingerprint: env.Fingerprint, SourceInventoryDigest: plan.InventoryDigest, Flatpaks: source.PackagePlan.Flatpak}
 	manifest.ManualReview = append(manifest.ManualReview, plan.Review...)
-	for index, name := range plan.Official {
-		if err := ctx.Err(); err != nil {
-			return empty(err)
-		}
-		if progress != nil {
-			progress(packagecapsule.Progress{Phase: "download", Package: name, Source: "official", Completed: index, Total: len(plan.Official)})
-		}
-		out, err := run.Output("pacman", "-Si", "--", name)
-		if err != nil {
-			return empty(err)
-		}
-		meta := Fields(out)
-		manifest.Packages = append(manifest.Packages, packagecapsule.Package{Name: name, Installed: meta["Version"], Source: "official", Reason: "explicit"})
-		if download {
-			if err := run.Run("pacman", "-Sw", "--noconfirm", "--", name); err != nil {
-				manifest.Exceptions = append(manifest.Exceptions, packagecapsule.Exception{Package: name, Code: "download-failed", Detail: err.Error()})
+	for _, name := range plan.Official {
+		manifest.Packages = append(manifest.Packages, packagecapsule.Package{Name: name, Installed: plan.Versions[name], Source: "official", Reason: "explicit"})
+	}
+	if download && len(plan.Official) > 0 {
+		if err := downloadOfficial(ctx, run, plan.Official, progress); err != nil {
+			if ctx.Err() != nil {
+				return empty(ctx.Err())
 			}
+			manifest.Exceptions = append(manifest.Exceptions, packagecapsule.Exception{Code: "download-failed", Detail: err.Error()})
 		}
 	}
 	roots := []string{filepath.Join(root, "cache")}

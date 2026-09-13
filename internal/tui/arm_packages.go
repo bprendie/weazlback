@@ -287,7 +287,7 @@ func captureARMWith(ctx context.Context, cfg config.Config, stage string, repo r
 		if p.Source == "foreign" {
 			lane = "aur"
 		}
-		emit(lane, systemSnapshotLane{State: p.Phase, Current: p.Package, Completed: p.Completed, Total: p.Total, Percent: lanePercent(p.Completed, p.Total), BytesDone: nonnegativeARMBytes(p.Bytes)})
+		emit(lane, systemSnapshotLane{State: p.Phase, Current: p.Package, Completed: p.Completed, Total: p.Total, Percent: lanePercent(p.Completed, p.Total), BytesDone: nonnegativeARMBytes(p.Bytes), BytesTotal: nonnegativeARMBytes(p.BytesTotal), Rate: p.Rate})
 	})
 	if cleanup != nil {
 		defer cleanup()
@@ -354,6 +354,9 @@ func (m Model) armPackagesScreen() string {
 	}
 	for _, lane := range []struct{ key, title string }{{"packages", "PACKAGES"}, {"aur", "AUR"}, {"repository", "REPO"}} {
 		body += snapshotLaneView(lane.title, m.armLanes[lane.key], m.height > 0 && m.height < 30) + "\n\n"
+	}
+	if lane := m.armLanes["packages"]; lane.State == "download" && lane.BytesTotal > 0 {
+		body += fmt.Sprintf("Downloaded / cached  %s / %s\n\n", bytesText(lane.BytesDone), bytesText(lane.BytesTotal))
 	}
 	if m.armManifest != nil {
 		body += fmt.Sprintf("Saved %s  •  %d artifacts  •  %s  •  %d exceptions\n", m.armManifest.CapturedAt.Local().Format("2006-01-02 15:04"), m.armManifest.Summary.Captured, bytesText(uint64(m.armManifest.Summary.Bytes)), len(m.armManifest.Exceptions))
