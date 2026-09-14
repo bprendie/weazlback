@@ -97,6 +97,7 @@ func Default() Config {
 	home, _ := os.UserHomeDir()
 	hostname, _ := os.Hostname()
 	core := existingPaths([]string{filepath.Join(home, ".config"), filepath.Join(home, ".local", "share"),
+		filepath.Join(home, ".local", "state", "omarchy"),
 		filepath.Join(home, ".local", "bin"), filepath.Join(home, ".ssh"), filepath.Join(home, ".gnupg"),
 		filepath.Join(home, ".bashrc"), filepath.Join(home, ".bash_profile"), filepath.Join(home, ".profile"),
 		filepath.Join(home, ".zshrc"), filepath.Join(home, ".gitconfig")})
@@ -252,6 +253,9 @@ func Load(path string) (Config, error) {
 		if cfg.Profiles[i].Name == "core" {
 			home, _ := os.UserHomeDir()
 			cfg.Profiles[i].Includes = appendUnique(cfg.Profiles[i].Includes, weazlRoots(home)...)
+			before := len(cfg.Profiles[i].Includes)
+			cfg.Profiles[i].Includes = appendUnique(cfg.Profiles[i].Includes, existingPaths([]string{filepath.Join(home, ".local", "state", "omarchy")})...)
+			changed = changed || len(cfg.Profiles[i].Includes) != before
 		}
 		if cfg.Profiles[i].Name == "home" {
 			changed = migrateHomeProfile(&cfg.Profiles[i]) || changed

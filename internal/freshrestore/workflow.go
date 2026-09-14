@@ -266,6 +266,10 @@ func Prepare(ctx context.Context, options Options) (*Restore, error) {
 		r.Close()
 		return nil, errors.New("existing restore journal belongs to another recovery scope")
 	}
+	if err := r.resetChangedMigrationPolicy(); err != nil {
+		r.Close()
+		return nil, err
+	}
 	if options.Connections == 0 {
 		if r.Journal.Connections > 0 {
 			r.Session.Repository.Connections = r.Journal.Connections

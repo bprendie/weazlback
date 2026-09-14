@@ -257,6 +257,16 @@ Recovery scopes are intentionally blunt and legible:
 * **Applications:** Reconciles the chosen identity's package and service manifest without placing filesystem bundles.
 * **Selective:** Browses one Restore Point immediately and restores one file or directory through the same rollback-preserving transaction engine. Building the cross-time catalog is optional.
 
+When migrating between x64 and ARM64, Core restores portable Omarchy widgets,
+custom themes, bar configuration, appearance, and personal keybindings. Target
+monitor, input, bootstrap, and session settings remain in place, including
+target-only helper modules imported by its keybindings. Retained paths are listed
+in the restore journal. Native executables still require the matching architecture.
+Core backups now include existing `.local/state/omarchy` theme state; older Core
+backups may restore theme files without restoring the active theme selection.
+If a prior restore used the broader preservation policy, its journal is archived
+before the new policy reapplies the same selected backup; rollback copies remain.
+
 Filesystem placement, Package Capsule reconciliation, and online application fallback
 run in parallel. Slow AUR builds do not hold your home directory hostage, and the
 interface shows independent progress lanes. Package conflicts, unavailable services,

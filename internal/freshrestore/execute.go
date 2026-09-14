@@ -129,6 +129,7 @@ func (r *Restore) Execute(ctx context.Context, stdout io.Writer) (Report, error)
 		}
 	}
 	report.RestoredPaths = append([]string(nil), r.Journal.CommittedPaths...)
+	report.PreservedPaths = append([]string(nil), r.Journal.PreservedPaths...)
 	if r.Plan.Scope != "applications" && !stageAtLeast(r.Journal.Stage, "browser_compatibility") {
 		result, issues := r.repairBrowserCompatibility()
 		r.Journal.BrowserRepair, r.Journal.BrowserIssues = result, issues

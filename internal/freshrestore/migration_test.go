@@ -98,6 +98,23 @@ func TestCompiledBundleMigrationPreservesTargetAndInstallsNativePair(t *testing.
 	if err := syscall.Mkfifo(pipe, 0600); err != nil {
 		t.Fatal(err)
 	}
+	portable := map[string]string{
+		".config/omarchy/plugins/custom/BarWidget.qml": "portable widget",
+		".config/omarchy/themes/custom/colors.toml":    "portable theme",
+		".config/omarchy/shell.json":                   "portable layout",
+		".config/hypr/bindings.lua":                    "-- personal bindings",
+		".config/hypr/looknfeel.lua":                   "-- appearance",
+		".local/state/omarchy/current/theme.name":      "custom",
+	}
+	for relative, content := range portable {
+		path := filepath.Join(home, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	r := Restore{Options: Options{RecoveryPath: filepath.Join(bundle, "weazlback-recovery.wzrk")}, Plan: Plan{OriginalHome: sourceHome, TargetHome: target, Migration: migrationPolicy(foreign, runtime.GOARCH)}}
 	if err := r.migrateStage(stage); err != nil {
 		t.Fatal(err)
@@ -107,6 +124,15 @@ func TestCompiledBundleMigrationPreservesTargetAndInstallsNativePair(t *testing.
 	}
 	if info, err := os.Stat(restricted); err != nil || info.Mode().Perm() != 0111 {
 		t.Fatalf("restored directory mode changed: %v, %v", info, err)
+	}
+	for relative, content := range portable {
+		body, err := os.ReadFile(filepath.Join(home, relative))
+		if err != nil || string(body) != content {
+			t.Fatalf("portable customization lost: %s: %q %v", relative, body, err)
+		}
+	}
+	if !contains(r.Journal.PreservedPaths, ".config/hypr/monitors.conf") {
+		t.Fatal("preserved hardware setting missing from journal")
 	}
 	b, _ := os.ReadFile(filepath.Join(home, ".config/hypr/monitors.conf"))
 	if string(b) != "target-device" {

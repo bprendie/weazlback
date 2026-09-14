@@ -150,6 +150,7 @@ type Plan struct {
 }
 
 type Journal struct {
+	PreservedPaths        []string             `json:"preserved_paths,omitempty"`
 	MigrationWithheld     []string             `json:"migration_withheld,omitempty"`
 	WithheldPaths         []string             `json:"withheld_paths,omitempty"`
 	Migration             Migration            `json:"migration"`
@@ -189,6 +190,7 @@ type Journal struct {
 }
 
 type Report struct {
+	PreservedPaths        []string             `json:"preserved_paths,omitempty"`
 	SnapshotID            string               `json:"snapshot_id"`
 	Hostname              string               `json:"hostname"`
 	RestoredPaths         []string             `json:"restored_paths,omitempty"`

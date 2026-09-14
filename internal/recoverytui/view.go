@@ -128,7 +128,7 @@ func (m Model) body() string {
 		if m.report.CapsuleFallbackReason != "" {
 			capsule += "\nFallback       " + m.report.CapsuleFallbackReason
 		}
-		return fmt.Sprintf("%s\nEngine         %s\nUsable         %s\nDurable        %s\nPlaced paths   %d\nCapsule local  %s\nBrowser locks  %d removed / %d live\nExceptions     %d\nJournal        %s", result, strings.ToUpper(m.report.Engine), m.report.Timing.TimeToUsable.Round(time.Second), m.report.Timing.TimeToDurable.Round(time.Second), len(m.report.RestoredPaths), capsule, m.report.BrowserRepair.Removed, m.report.BrowserRepair.Live, len(m.report.PackageErrors)+len(m.report.BrowserIssues), m.report.JournalPath) + errorText(m.err)
+		return fmt.Sprintf("%s\nEngine         %s\nUsable         %s\nDurable        %s\nPlaced paths   %d\nTarget settings %d retained (journal)\nCapsule local  %s\nBrowser locks  %d removed / %d live\nExceptions     %d\nJournal        %s", result, strings.ToUpper(m.report.Engine), m.report.Timing.TimeToUsable.Round(time.Second), m.report.Timing.TimeToDurable.Round(time.Second), len(m.report.RestoredPaths), len(m.report.PreservedPaths), capsule, m.report.BrowserRepair.Removed, m.report.BrowserRepair.Live, len(m.report.PackageErrors)+len(m.report.BrowserIssues), m.report.JournalPath) + errorText(m.err)
 	default:
 		return "Starting recovery…"
 	}

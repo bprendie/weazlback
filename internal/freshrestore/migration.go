@@ -12,6 +12,7 @@ import (
 )
 
 type Migration struct {
+	PolicyVersion      int      `json:"policy_version,omitempty"`
 	Active             bool     `json:"active"`
 	SourceArchitecture string   `json:"source_architecture"`
 	TargetArchitecture string   `json:"target_architecture"`
@@ -29,8 +30,9 @@ func migrationPolicy(source, target string) Migration {
 	if !m.Active {
 		return m
 	}
-	m.Preserve = []string{".config/hypr", ".config/omarchy", ".config/uwsm", ".config/systemd", ".local/share/systemd", ".local/share/omarchy", ".local/state/omarchy", ".weazlback", ".rustup", ".cargo/bin", ".local/share/mise", ".local/share/fnm", ".nvm", ".pyenv"}
-	m.Review = []string{"Target hardware and session configuration retained; review source device settings before reuse", "Foreign native binaries and reproducible native environments are withheld; reinstall their native equivalents", "VM and container images are restored as data; native execution is not implied"}
+	m.PolicyVersion = 1
+	m.Preserve = []string{".config/hypr/hyprland.lua", ".config/hypr/hyprland.conf", ".config/hypr/monitors.lua", ".config/hypr/monitors.conf", ".config/hypr/input.lua", ".config/hypr/input.conf", ".config/hypr/autostart.lua", ".config/hypr/autostart.conf", ".config/hypr/xdph.conf", ".config/uwsm", ".config/systemd", ".local/share/systemd", ".weazlback", ".rustup", ".cargo/bin", ".local/share/mise", ".local/share/fnm", ".nvm", ".pyenv"}
+	m.Review = []string{"Restore portable widgets, themes, appearance, and personal keybindings; retain target monitor, input, bootstrap, and session settings", "Foreign native binaries and reproducible native environments are withheld; reinstall their native equivalents", "VM and container images are restored as data; native execution is not implied"}
 	return m
 }
 
@@ -45,9 +47,17 @@ func (r *Restore) migrateStage(root string) (result error) {
 		return fmt.Errorf("migration source home must be a staged directory")
 	}
 	for _, rel := range r.Plan.Migration.Preserve {
+		_, sourceErr := os.Lstat(filepath.Join(sourceHome, rel))
+		_, targetErr := os.Lstat(filepath.Join(r.Plan.TargetHome, rel))
 		if err := retainTarget(sourceHome, r.Plan.TargetHome, rel); err != nil {
 			return err
 		}
+		if sourceErr == nil || targetErr == nil {
+			r.Journal.PreservedPaths = appendUniqueStrings(r.Journal.PreservedPaths, rel)
+		}
+	}
+	if err := r.mergeTargetDesktopHelpers(sourceHome); err != nil {
+		return err
 	}
 	// Restored directories can intentionally lack owner read/write permissions.
 	// Temporarily enable traversal in private staging, then restore exact modes.

@@ -103,6 +103,9 @@ func reviewLines(plan freshrestore.Plan) []string {
 	add("SYSTEM", plan.SystemServices)
 	add("USER", plan.UserServices)
 	add("LOCALAPP", plan.LocalApps)
+	if plan.Migration.Active {
+		add("RETAIN", plan.Migration.Preserve)
+	}
 	if plan.Applications != nil {
 		add("REVIEW", plan.Applications.ManualReview)
 	}
