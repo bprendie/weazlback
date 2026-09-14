@@ -10,7 +10,13 @@ import (
 
 func (r *Restore) stageCoreStandard(ctx context.Context) error {
 	emitProgress(r.Options.Progress, RestoreProgress{Phase: r.Plan.Scope + " staging"})
-	_ = os.RemoveAll(r.StageDir)
+	// A matching journal already binds this staging tree to the selected points.
+	// Let Restic reuse extracted files after a later migration/validation failure.
+	if r.Journal.SnapshotID == "" || r.Journal.SnapshotID != r.Plan.Snapshot.ID {
+		if err := os.RemoveAll(r.StageDir); err != nil {
+			return err
+		}
+	}
 	if err := os.MkdirAll(r.StageDir, 0o700); err != nil {
 		return err
 	}

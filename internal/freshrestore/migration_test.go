@@ -82,9 +82,23 @@ func TestCompiledBundleMigrationPreservesTargetAndInstallsNativePair(t *testing.
 	if err := copyAcrossFilesystems(filepath.Join(bundle, "linux-"+foreign, "weazlback"), foreignFile); err != nil {
 		t.Fatal(err)
 	}
+	restricted := filepath.Join(home, ".cache/yay/slic3r/pkg")
+	if err := os.MkdirAll(restricted, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(restricted, "portable.txt"), []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(restricted, 0111); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(restricted, 0700)
 	r := Restore{Options: Options{RecoveryPath: filepath.Join(bundle, "weazlback-recovery.wzrk")}, Plan: Plan{OriginalHome: sourceHome, TargetHome: target, Migration: migrationPolicy(foreign, runtime.GOARCH)}}
 	if err := r.migrateStage(stage); err != nil {
 		t.Fatal(err)
+	}
+	if info, err := os.Stat(restricted); err != nil || info.Mode().Perm() != 0111 {
+		t.Fatalf("restored directory mode changed: %v, %v", info, err)
 	}
 	b, _ := os.ReadFile(filepath.Join(home, ".config/hypr/monitors.conf"))
 	if string(b) != "target-device" {

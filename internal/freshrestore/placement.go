@@ -2,6 +2,7 @@ package freshrestore
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,8 +116,67 @@ func isCrossDevice(err error) bool {
 	return ok && linkErr.Err == syscall.EXDEV
 }
 
-func copyAcrossFilesystems(source, target string) error {
-	command := exec.Command("cp", "-a", "--reflink=auto", "--", source, target)
+func copyAcrossFilesystems(source, target string) (result error) {
+	// Standard staging can live on a different subvolume. Read restrictive
+	// restored modes without making those permission changes permanent.
+	type changedMode struct {
+		path, relative string
+		mode           fs.FileMode
+	}
+	var changed []changedMode
+	copyStarted := false
+	defer func() {
+		for i := len(changed) - 1; i >= 0; i-- {
+			item := changed[i]
+			paths := []string{item.path}
+			if copyStarted {
+				paths = append(paths, filepath.Join(target, item.relative))
+			}
+			for _, path := range paths {
+				info, err := os.Lstat(path)
+				if os.IsNotExist(err) {
+					continue
+				}
+				if err == nil && info.Mode().Type() == item.mode.Type() {
+					err = os.Chmod(path, item.mode)
+				}
+				if err != nil && result == nil {
+					result = err
+				}
+			}
+		}
+	}()
+	if err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		needed := fs.FileMode(0400)
+		if entry.IsDir() {
+			needed = 0700
+		} else if !info.Mode().IsRegular() {
+			return nil
+		}
+		if info.Mode().Perm()&needed == needed {
+			return nil
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if err := os.Chmod(path, info.Mode()|needed); err != nil {
+			return err
+		}
+		changed = append(changed, changedMode{path, rel, info.Mode()})
+		return nil
+	}); err != nil {
+		return err
+	}
+	copyStarted = true
+	command := exec.Command("cp", "-aT", "--reflink=auto", "--", source, target)
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("archive-preserving cross-filesystem copy: %w: %s", err, strings.TrimSpace(string(output)))
 	}

@@ -36,7 +36,7 @@ func migrationPolicy(source, target string) Migration {
 
 // Sanitize only private staging. Preserve destination components inside staged
 // parent trees before atomic placement, so a broad Home overlay cannot erase them.
-func (r *Restore) migrateStage(root string) error {
+func (r *Restore) migrateStage(root string) (result error) {
 	if !r.Plan.Migration.Active {
 		return nil
 	}
@@ -49,6 +49,33 @@ func (r *Restore) migrateStage(root string) error {
 			return err
 		}
 	}
+	// Restored directories can intentionally lack owner read/write permissions.
+	// Temporarily enable traversal in private staging, then restore exact modes.
+	type modeChange struct {
+		path string
+		info fs.FileInfo
+	}
+	var changed []modeChange
+	defer func() {
+		for i := len(changed) - 1; i >= 0; i-- {
+			current, err := os.Lstat(changed[i].path)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				if result == nil {
+					result = err
+				}
+				continue
+			}
+			if !os.SameFile(current, changed[i].info) {
+				continue
+			}
+			if err := os.Chmod(changed[i].path, changed[i].info.Mode()); err != nil && result == nil {
+				result = fmt.Errorf("restore staged directory permissions: %w", err)
+			}
+		}
+	}()
 	err := filepath.WalkDir(sourceHome, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -75,6 +102,16 @@ func (r *Restore) migrateStage(root string) error {
 			}
 		}
 		if entry.IsDir() {
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			if info.Mode().Perm()&0700 != 0700 {
+				if err := os.Chmod(path, info.Mode()|0700); err != nil {
+					return err
+				}
+				changed = append(changed, modeChange{path, info})
+			}
 			switch entry.Name() {
 			case "node_modules", ".venv", "venv", "__pycache__":
 				r.MigrationWithheld = append(r.MigrationWithheld, rel+": native environment retained from target or needs rebuilding")
