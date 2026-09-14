@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -93,9 +94,16 @@ func TestCompiledBundleMigrationPreservesTargetAndInstallsNativePair(t *testing.
 		t.Fatal(err)
 	}
 	defer os.Chmod(restricted, 0700)
+	pipe := filepath.Join(home, "steam.pipe")
+	if err := syscall.Mkfifo(pipe, 0600); err != nil {
+		t.Fatal(err)
+	}
 	r := Restore{Options: Options{RecoveryPath: filepath.Join(bundle, "weazlback-recovery.wzrk")}, Plan: Plan{OriginalHome: sourceHome, TargetHome: target, Migration: migrationPolicy(foreign, runtime.GOARCH)}}
 	if err := r.migrateStage(stage); err != nil {
 		t.Fatal(err)
+	}
+	if info, err := os.Lstat(pipe); err != nil || info.Mode()&os.ModeNamedPipe == 0 {
+		t.Fatalf("staged pipe changed: %v %v", info, err)
 	}
 	if info, err := os.Stat(restricted); err != nil || info.Mode().Perm() != 0111 {
 		t.Fatalf("restored directory mode changed: %v, %v", info, err)

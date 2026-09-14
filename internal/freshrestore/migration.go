@@ -122,7 +122,9 @@ func (r *Restore) migrateStage(root string) (result error) {
 			}
 			return nil
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
+		// Pipes, sockets, and devices are data entries, never ELF candidates.
+		// Opening a restored FIFO here waits forever for a writer.
+		if !entry.Type().IsRegular() {
 			return nil
 		}
 		file, err := elf.Open(path)
